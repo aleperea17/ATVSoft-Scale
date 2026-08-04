@@ -17,7 +17,7 @@ from pony.orm import ObjectNotFound, db_session, flush
 from src.db import db
 from src.models import ApiConnection, Lead, StorySequence, StorySlide
 from src.schemas import StorySequenceIn
-from src.services.sync_settings_service import get_stories_interval_minutes
+from src.services.sync_settings_service import auto_sync_enabled, get_stories_interval_minutes
 from src.story_sync_scheduler_ref import next_auto_sync_stories_run_time
 
 AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
@@ -88,7 +88,7 @@ WHERE l.user_id = $user_id
 AND trim(both from coalesce(l.punto_agenda, '')) = $tid"""
     with db_session:
         rows = db.select(sql, globals(), {"user_id": user_id, "tid": tid})
-    return int(rows[0]) if rows else 0
+    return int(rows[0]) if len(rows) > 0 else 0
 
 
 def _sum_pago_agenda_for_sequence(user_id: int, sequence_db_id: int) -> float:
@@ -99,7 +99,7 @@ WHERE l.user_id = $user_id
 AND trim(both from coalesce(l.punto_agenda, '')) = $tid"""
     with db_session:
         rows = db.select(sql, globals(), {"user_id": user_id, "tid": tid})
-    if not rows:
+    if len(rows) == 0:
         return 0.0
     v = rows[0]
     return float(v) if v is not None else 0.0
@@ -398,11 +398,13 @@ def _fetch_story_insights(
 
 async def download_story_image(url: str, user_id: str, story_id: str) -> str | None:
     try:
-        folder = f"media/stories/{user_id}"
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        media_root = os.path.normpath(os.path.join(base_dir, "..", "..", "media"))
+        folder = os.path.join(media_root, "stories", str(user_id))
         os.makedirs(folder, exist_ok=True)
-        filepath = f"{folder}/{story_id}.jpg"
+        filepath = os.path.join(folder, f"{story_id}.jpg")
         async with httpx.AsyncClient() as client:
-            response = await client.get(url, follow_redirects=True, timeout=10)
+            response = await client.get(url, follow_redirects=True, timeout=30)
             if response.status_code == 200:
                 with open(filepath, "wb") as f:
                     f.write(response.content)
@@ -775,14 +777,15 @@ class StoriesService:
             conn.last_sync_at = datetime.now(AR_TZ)
 
     @db_session
-    def get_sync_status(self, user_id: str) -> dict[str, str | None]:
+    def get_sync_status(self, user_id: str) -> dict[str, str | bool | None]:
         try:
             conn = ApiConnection.get(user_id=int(user_id), platform="instagram")
         except ObjectNotFound:
             conn = None
         last = conn.last_sync_at if conn else None
-        sched_next = next_auto_sync_stories_run_time()
-        if sched_next is not None:
+        if not auto_sync_enabled():
+            next_sync = None
+        elif (sched_next := next_auto_sync_stories_run_time()) is not None:
             next_sync = sched_next
         else:
             next_sync = (
@@ -798,6 +801,7 @@ class StoriesService:
         return {
             "last_sync": _iso_dt(last),
             "next_sync": _iso_dt(next_sync),
+            "auto_sync_enabled": auto_sync_enabled(),
             "token_saved_at": _iso_dt(token_saved_at),
             "token_expires_at": _iso_dt(token_expires_at),
         }

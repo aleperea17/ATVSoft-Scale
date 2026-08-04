@@ -49,6 +49,7 @@ from src.services.sync_settings_service import (
     DEFAULT_CALENDLY_INTERVAL_MINUTES,
     DEFAULT_REELS_INTERVAL_MINUTES,
     DEFAULT_STORIES_INTERVAL_MINUTES,
+    auto_sync_enabled,
     get_calendly_interval_minutes,
     get_reels_interval_minutes,
     get_stories_interval_minutes,
@@ -146,46 +147,52 @@ async def lifespan(_: FastAPI):
     archivos = glob.glob(os.path.join(media_dir, "**/*.jpg"), recursive=True)
     print(f"[media] Archivos encontrados: {len(archivos)}")
     print(f"[media] Directorio: {media_dir}")
-    scheduler.add_job(
-        auto_sync_stories,
-        trigger=IntervalTrigger(minutes=DEFAULT_STORIES_INTERVAL_MINUTES),
-        id=STORIES_JOB_ID,
-        replace_existing=True,
-        next_run_time=datetime.now(AR_TZ),
-    )
-    scheduler.add_job(
-        auto_refresh_reels_metrics,
-        trigger=IntervalTrigger(minutes=DEFAULT_REELS_INTERVAL_MINUTES),
-        id=REELS_JOB_ID,
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        auto_sync_calendly,
-        trigger=IntervalTrigger(minutes=DEFAULT_CALENDLY_INTERVAL_MINUTES),
-        id=CALENDLY_JOB_ID,
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        auto_generate_closer_daily_reports,
-        trigger=CronTrigger(hour=23, minute=0, timezone=AR_TZ),
-        id=CLOSER_DAILY_REPORT_JOB_ID,
-        replace_existing=True,
-    )
-    bind_sync_scheduler(scheduler)
-    apply_sync_schedules()
-    scheduler.start()
-    print(
-        f"[scheduler] Auto-sync historias cada {get_stories_interval_minutes()} min "
-        f"(próximo job según APScheduler)"
-    )
-    print(
-        f"[scheduler] Auto refresh-metrics reels cada {get_reels_interval_minutes()} min"
-    )
-    print(
-        f"[scheduler] Auto-sync Calendly cada {get_calendly_interval_minutes()} min "
-        f"(check liviano → sync solo si hay novedades)"
-    )
-    print("[scheduler] Reporte closer ventas automático diario a las 23:00 (Argentina)")
+    if auto_sync_enabled():
+        scheduler.add_job(
+            auto_sync_stories,
+            trigger=IntervalTrigger(minutes=DEFAULT_STORIES_INTERVAL_MINUTES),
+            id=STORIES_JOB_ID,
+            replace_existing=True,
+            next_run_time=datetime.now(AR_TZ),
+        )
+        scheduler.add_job(
+            auto_refresh_reels_metrics,
+            trigger=IntervalTrigger(minutes=DEFAULT_REELS_INTERVAL_MINUTES),
+            id=REELS_JOB_ID,
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            auto_sync_calendly,
+            trigger=IntervalTrigger(minutes=DEFAULT_CALENDLY_INTERVAL_MINUTES),
+            id=CALENDLY_JOB_ID,
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            auto_generate_closer_daily_reports,
+            trigger=CronTrigger(hour=23, minute=0, timezone=AR_TZ),
+            id=CLOSER_DAILY_REPORT_JOB_ID,
+            replace_existing=True,
+        )
+        bind_sync_scheduler(scheduler)
+        apply_sync_schedules()
+        scheduler.start()
+        print(
+            f"[scheduler] Auto-sync historias cada {get_stories_interval_minutes()} min "
+            f"(próximo job según APScheduler)"
+        )
+        print(
+            f"[scheduler] Auto refresh-metrics reels cada {get_reels_interval_minutes()} min"
+        )
+        print(
+            f"[scheduler] Auto-sync Calendly cada {get_calendly_interval_minutes()} min "
+            f"(check liviano -> sync solo si hay novedades)"
+        )
+        print("[scheduler] Reporte closer ventas automático diario a las 23:00 (Argentina)")
+    else:
+        print(
+            "[scheduler] Auto-sync DESACTIVADO (DISABLE_AUTO_SYNC=true). "
+            "Solo sincronización manual."
+        )
     yield
     scheduler.shutdown()
 

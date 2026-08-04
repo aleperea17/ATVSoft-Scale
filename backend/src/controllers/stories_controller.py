@@ -168,7 +168,7 @@ async def sync_stories(
 @router.get("/sync-status")
 def get_sync_status(
     user_id: Annotated[str, Depends(get_current_user)],
-) -> dict[str, str | None]:
+) -> dict[str, str | bool | None]:
     try:
         return service.get_sync_status(user_id)
     except HTTPException as e:

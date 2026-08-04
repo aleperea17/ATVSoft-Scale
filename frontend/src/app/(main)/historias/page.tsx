@@ -78,6 +78,7 @@ type Secuencia = {
 type SyncStatus = {
   last_sync: string | null
   next_sync: string | null
+  auto_sync_enabled?: boolean
   token_saved_at?: string | null
   token_expires_at?: string | null
 }
@@ -281,11 +282,12 @@ export default function HistoriasPage() {
   const fetchSyncStatus = useCallback(async () => {
     if (!ready) return
     const res = await apiFetch('/stories/sync-status', { headers: authHeaders() })
-    const data = await res.json().catch(() => ({ last_sync: null, next_sync: null, token_saved_at: null, token_expires_at: null }))
+    const data = await res.json().catch(() => ({ last_sync: null, next_sync: null, auto_sync_enabled: true, token_saved_at: null, token_expires_at: null }))
     if (res.ok) {
       setSyncStatus({
         last_sync: data.last_sync || null,
         next_sync: data.next_sync || null,
+        auto_sync_enabled: data.auto_sync_enabled !== false,
         token_saved_at: data.token_saved_at || null,
         token_expires_at: data.token_expires_at || null,
       })
@@ -357,6 +359,7 @@ export default function HistoriasPage() {
       const res = await apiFetch('/stories/sync', {
         method: 'POST',
         headers: authHeaders(),
+        signal: AbortSignal.timeout(120_000),
       })
       const result = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -376,7 +379,8 @@ export default function HistoriasPage() {
   }
 
   useEffect(() => {
-    if (!syncStatus?.next_sync) return
+    const autoSync = syncStatus?.auto_sync_enabled !== false
+    if (!autoSync || !syncStatus?.next_sync) return
     const interval = setInterval(() => {
       const now = new Date()
       const next = new Date(syncStatus.next_sync as string)
@@ -392,7 +396,7 @@ export default function HistoriasPage() {
       setCountdown(`${minutes}:${seconds.toString().padStart(2, '0')}`)
     }, 1000)
     return () => clearInterval(interval)
-  }, [syncStatus?.next_sync])
+  }, [syncStatus?.next_sync, syncStatus?.auto_sync_enabled ?? true])
 
   // Crop stories from screenshot using AI grid info
   const cropStoriesFromImage = (imgSrc: string, gridInfo: { headerHeightPercent: number; rows: number; cols: number }, positions: number[]): Promise<string[]> => {
@@ -738,10 +742,13 @@ export default function HistoriasPage() {
                 Último sync: {new Date(syncStatus.last_sync).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
               </span>
             )}
-            {countdown && (
+            {countdown && syncStatus?.auto_sync_enabled !== false && (
               <span className="text-zinc-300">
                 Próximo en: <span className="font-mono text-white">{countdown}</span>
               </span>
+            )}
+            {syncStatus?.auto_sync_enabled === false && (
+              <span className="text-amber-400/90">Sync automático desactivado — usá el botón Sincronizar</span>
             )}
           </div>
           <div className={`mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between ${tokenStatusColor}`}>

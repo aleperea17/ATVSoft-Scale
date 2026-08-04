@@ -17,6 +17,7 @@ from src.services.sync_settings_service import (
     MAX_SYNC_INTERVAL_MINUTES,
     MIN_CALENDLY_INTERVAL_MINUTES,
     MIN_SYNC_INTERVAL_MINUTES,
+    auto_sync_enabled,
     get_sync_settings_dict,
     update_sync_settings,
 )
@@ -45,13 +46,15 @@ def _iso_dt(value: datetime | None) -> str | None:
 
 def _build_out() -> SyncSettingsOut:
     data = get_sync_settings_dict()
+    auto_on = auto_sync_enabled()
     return SyncSettingsOut(
         stories_interval_minutes=data["stories_interval_minutes"],
         reels_interval_minutes=data["reels_interval_minutes"],
         calendly_interval_minutes=data["calendly_interval_minutes"],
-        stories_next_sync=_iso_dt(next_job_run_time(STORIES_JOB_ID)),
-        reels_next_sync=_iso_dt(next_job_run_time(REELS_JOB_ID)),
-        calendly_next_sync=_iso_dt(next_job_run_time(CALENDLY_JOB_ID)),
+        stories_next_sync=_iso_dt(next_job_run_time(STORIES_JOB_ID)) if auto_on else None,
+        reels_next_sync=_iso_dt(next_job_run_time(REELS_JOB_ID)) if auto_on else None,
+        calendly_next_sync=_iso_dt(next_job_run_time(CALENDLY_JOB_ID)) if auto_on else None,
+        auto_sync_enabled=auto_on,
         min_interval_minutes=MIN_SYNC_INTERVAL_MINUTES,
         max_interval_minutes=MAX_SYNC_INTERVAL_MINUTES,
         min_calendly_interval_minutes=MIN_CALENDLY_INTERVAL_MINUTES,
@@ -92,14 +95,15 @@ async def patch_sync_settings(
         calendly_interval_minutes=body.calendly_interval_minutes,
     )
 
-    stories_changed = (
-        body.stories_interval_minutes is not None
-        and int(body.stories_interval_minutes) != before["stories_interval_minutes"]
-    )
-    if stories_changed:
-        apply_sync_schedules(stories_run_immediately=True)
-        background_tasks.add_task(_sync_stories_for_user, user_id)
-    else:
-        apply_sync_schedules()
+    if auto_sync_enabled():
+        stories_changed = (
+            body.stories_interval_minutes is not None
+            and int(body.stories_interval_minutes) != before["stories_interval_minutes"]
+        )
+        if stories_changed:
+            apply_sync_schedules(stories_run_immediately=True)
+            background_tasks.add_task(_sync_stories_for_user, user_id)
+        else:
+            apply_sync_schedules()
 
     return _build_out()

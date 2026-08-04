@@ -4,9 +4,15 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from decouple import config
 from pony.orm import db_session
 
 from src.models import AppSyncSettings
+
+
+def auto_sync_enabled() -> bool:
+    """False cuando DISABLE_AUTO_SYNC=true en .env (solo sincronización manual)."""
+    return not config("DISABLE_AUTO_SYNC", default=False, cast=bool)
 
 DEFAULT_STORIES_INTERVAL_MINUTES = 5
 DEFAULT_REELS_INTERVAL_MINUTES = 1440  # ~24 h

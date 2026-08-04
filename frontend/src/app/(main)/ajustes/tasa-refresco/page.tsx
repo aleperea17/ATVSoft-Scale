@@ -12,6 +12,7 @@ type SyncSettings = {
   stories_next_sync: string | null
   reels_next_sync: string | null
   calendly_next_sync: string | null
+  auto_sync_enabled?: boolean
   min_interval_minutes: number
   max_interval_minutes: number
   min_calendly_interval_minutes?: number
@@ -200,7 +201,7 @@ export default function TasaRefrescoPage() {
       setStoriesMin(String(data.stories_interval_minutes))
       setReelsMin(String(data.reels_interval_minutes))
       setCalendlyMin(String(data.calendly_interval_minutes ?? 360))
-      if (storiesChanged) {
+      if (storiesChanged && data.auto_sync_enabled !== false) {
         window.dispatchEvent(new Event('stories-sync-settings-updated'))
         toast('Guardado. Sincronizando historias y reiniciando contador…')
       } else {
@@ -229,6 +230,12 @@ export default function TasaRefrescoPage() {
           check liviano: solo si hay agendas nuevas se traen los datos. Los cambios aplican al
           instante sin reiniciar el backend.
         </p>
+        {settings?.auto_sync_enabled === false && (
+          <p className="mt-3 max-w-2xl rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[12px] text-amber-200/90">
+            Sync automático desactivado en el servidor (<code className="text-amber-100">DISABLE_AUTO_SYNC=true</code>).
+            Los intervalos quedan guardados pero no corren hasta reactivarlo. La sincronización es manual.
+          </p>
+        )}
       </div>
 
       <div className="mb-8 space-y-6">

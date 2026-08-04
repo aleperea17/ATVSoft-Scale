@@ -671,6 +671,7 @@ class SyncSettingsOut(BaseModel):
     stories_next_sync: str | None = None
     reels_next_sync: str | None = None
     calendly_next_sync: str | None = None
+    auto_sync_enabled: bool = True
     min_interval_minutes: int = 1
     max_interval_minutes: int = 10080
     min_calendly_interval_minutes: int = 60

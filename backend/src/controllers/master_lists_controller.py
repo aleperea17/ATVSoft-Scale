@@ -31,12 +31,12 @@ def _parse_uid(user_id: str) -> int:
         raise HTTPException(status_code=400, detail="X-User-Id debe ser numérico.") from e
 
 
-def _as_utc_aware(dt: datetime | None) -> datetime | None:
+def _as_utc_naive(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
 
 
 def _items_as_list(raw: object) -> list[str]:
@@ -84,9 +84,9 @@ def _merge_items_from_rows(rows: list[MasterList]) -> list[str]:
 
 def _replace_category_rows(uid: int, category: str, items: list[str]) -> None:
     """Una sola fila por (user_id, category); borra duplicados y persiste `items`."""
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     rows = _rows_for_category(uid, category)
-    created_stamps = [_as_utc_aware(r.created_at) for r in rows if r.created_at is not None]
+    created_stamps = [_as_utc_naive(r.created_at) for r in rows if r.created_at is not None]
     created = min(created_stamps, default=now)
     for r in rows:
         r.delete()
@@ -101,7 +101,7 @@ def _replace_category_rows(uid: int, category: str, items: list[str]) -> None:
 
 def _ensure_categories(uid: int) -> None:
     """Crea filas vacías solo si falta la categoría (requiere UNIQUE (user_id, category) en BD)."""
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     have = {m.category for m in _rows_for_user(uid)}
     for cat in VALID_CATEGORIES:
         if cat not in have:

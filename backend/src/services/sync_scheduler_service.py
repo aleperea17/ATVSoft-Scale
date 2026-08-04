@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 from apscheduler.triggers.interval import IntervalTrigger
 
 from src.services.sync_settings_service import (
+    auto_sync_enabled,
     get_calendly_interval_minutes,
     get_reels_interval_minutes,
     get_stories_interval_minutes,
@@ -38,7 +39,7 @@ def next_job_run_time(job_id: str) -> datetime | None:
 
 def apply_sync_schedules(*, stories_run_immediately: bool = False) -> None:
     """Relee intervalos de BD y reprograma los jobs ya registrados en el scheduler."""
-    if _scheduler is None:
+    if not auto_sync_enabled() or _scheduler is None:
         return
     stories_m = get_stories_interval_minutes()
     reels_m = get_reels_interval_minutes()
