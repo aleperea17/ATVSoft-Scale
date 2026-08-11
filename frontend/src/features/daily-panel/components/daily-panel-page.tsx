@@ -8,8 +8,10 @@ import {
   createManualCall,
   generateCloserReportsForDay,
   getDailyCalls,
+  getPendingAgendaLeads,
   getProgramOptions,
-  getTeamClosers,
+  getTeamMemberNames,
+  patchLeadAgendaPoint,
   patchLeadCalificacion,
   patchLeadCallLink,
   patchLeadCloser,
@@ -17,6 +19,7 @@ import {
   patchLeadPayment,
   patchLeadProgramOffered,
   patchLeadProgramadaOfrecido,
+  patchLeadSetter,
   patchLeadStatus,
   resolveDefaultCloser,
   buildCloserOptions,
@@ -26,8 +29,10 @@ import {
   getAdminDailyCalls,
 } from '@/features/admin-panel/services/admin-panel-service'
 import { DEFAULT_DAILY_CLOSER } from '../constants'
-import type { DailyCall } from '../types'
+import type { DailyCall, PendingAgendaLead } from '../types'
 import { DailyCallsTable } from './daily-calls-table'
+import { PendingAgendaTable } from './pending-agenda-table'
+import { AgendaPointPickerModal } from '@/features/leads/components/agenda-point-picker-modal'
 import '../daily-panel.css'
 import '../daily-panel-manual-call.css'
 
@@ -60,6 +65,17 @@ function useArgentinaClock(active: boolean): string {
   return clock
 }
 
+function monthKeyFromIsoDate(isoDate: string): string {
+  return isoDate.slice(0, 7)
+}
+
+function monthLabelFromKey(monthKey: string): string {
+  const [y, m] = monthKey.split('-').map(Number)
+  if (!y || !m) return monthKey
+  const label = new Intl.DateTimeFormat('es-AR', { month: 'long' }).format(new Date(y, m - 1, 1))
+  return `${label} ${y}`
+}
+
 function PanelShell({ children }: { children: ReactNode }) {
   return (
     <div className="neo-panel">
@@ -82,7 +98,12 @@ export function DailyPanelPage({
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0])
   const [fecha, setFecha] = useState('')
   const [calls, setCalls] = useState<DailyCall[]>([])
+  const [pendingAgenda, setPendingAgenda] = useState<PendingAgendaLead[]>([])
+  const [pendingAgendaMonth, setPendingAgendaMonth] = useState('')
+  const [pendingLoading, setPendingLoading] = useState(true)
+  const [agendaModalLead, setAgendaModalLead] = useState<PendingAgendaLead | null>(null)
   const [closerOptions, setCloserOptions] = useState<string[]>([])
+  const [setterOptions, setSetterOptions] = useState<string[]>([])
   const [programOptions, setProgramOptions] = useState<string[]>([''])
   const [defaultCloser, setDefaultCloser] = useState(DEFAULT_DAILY_CLOSER)
   const [loading, setLoading] = useState(true)
@@ -98,22 +119,34 @@ export function DailyPanelPage({
     async (silent = false) => {
       if (!ready || !userId) {
         setCalls([])
+        setPendingAgenda([])
+        setPendingAgendaMonth('')
         setFecha('')
         setLoading(false)
+        setPendingLoading(false)
         return
       }
       if (isAdmin && !adminToken) {
         setLoading(false)
+        setPendingLoading(false)
         return
       }
-      if (!silent) setLoading(true)
+      if (!silent) {
+        setLoading(true)
+        setPendingLoading(true)
+      }
       try {
         let closers: string[] = []
+        let setters: string[] = []
         try {
-          closers = await getTeamClosers()
+          const team = await getTeamMemberNames()
+          closers = team.closers
+          setters = team.setters
         } catch {
           closers = []
+          setters = []
         }
+        setSetterOptions(setters)
         const resolvedDefault = resolveDefaultCloser(closers)
         setCloserOptions(closers)
         setDefaultCloser(resolvedDefault)
@@ -121,17 +154,26 @@ export function DailyPanelPage({
         void getProgramOptions()
           .then(setProgramOptions)
           .catch(() => setProgramOptions(['']))
-        const data = isAdmin
-          ? await getAdminDailyCalls(selectedDate, adminToken!, closers, resolvedDefault)
-          : await getDailyCalls(closers, resolvedDefault)
+        const monthKey = monthKeyFromIsoDate(selectedDate)
+        const [data, pendingData] = await Promise.all([
+          isAdmin
+            ? getAdminDailyCalls(selectedDate, adminToken!, closers, resolvedDefault)
+            : getDailyCalls(closers, resolvedDefault),
+          getPendingAgendaLeads(monthKey),
+        ])
         setFecha(data.fecha)
         setCalls(data.llamadas)
+        setPendingAgenda(pendingData.leads)
+        setPendingAgendaMonth(pendingData.month || monthKey)
       } catch (e) {
         if (!silent) {
           toast(e instanceof Error ? e.message : 'Error al cargar el panel.')
         }
       } finally {
-        if (!silent) setLoading(false)
+        if (!silent) {
+          setLoading(false)
+          setPendingLoading(false)
+        }
       }
     },
     [ready, userId, toast, isAdmin, adminToken, selectedDate],
@@ -266,6 +308,35 @@ export function DailyPanelPage({
     [toast],
   )
 
+  const handleAssignAgendaPoint = useCallback(
+    async (leadId: number, value: string) => {
+      try {
+        await patchLeadAgendaPoint(leadId, value)
+        setPendingAgenda((prev) => prev.filter((l) => l.id !== leadId))
+        toast('Punto de agenda guardado.')
+      } catch (e) {
+        toast(e instanceof Error ? e.message : 'No se pudo guardar el punto de agenda.')
+        throw e
+      }
+    },
+    [toast],
+  )
+
+  const handleSetterChange = useCallback(
+    async (leadId: number, setter: string) => {
+      try {
+        await patchLeadSetter(leadId, setter)
+        setPendingAgenda((prev) =>
+          prev.map((l) => (l.id === leadId ? { ...l, setter: setter.trim() || null } : l)),
+        )
+      } catch (e) {
+        toast(e instanceof Error ? e.message : 'No se pudo guardar el setter.')
+        throw e
+      }
+    },
+    [toast],
+  )
+
   const handleAddManualCall = useCallback(async () => {
     const name = manualName.trim()
     const hora = manualHora.trim()
@@ -350,6 +421,10 @@ export function DailyPanelPage({
   const fechaLabel = fecha ? formatIsoDateDdMmYyyy(fecha) : isAdmin ? formatIsoDateDdMmYyyy(selectedDate) : 'HOY'
   const countLabel =
     calls.length === 1 ? '1 llamada' : `${calls.length} llamadas`
+  const operativeMonth = monthKeyFromIsoDate(selectedDate)
+  const pendingCountLabel =
+    pendingAgenda.length === 1 ? '1 pendiente' : `${pendingAgenda.length} pendientes`
+  const pendingMonthLabel = monthLabelFromKey(pendingAgendaMonth || operativeMonth)
 
   return (
     <PanelShell>
@@ -391,11 +466,11 @@ export function DailyPanelPage({
           </button>
           <button
             type="button"
-            disabled={loading}
+            disabled={loading || pendingLoading}
             onClick={() => void fetchCalls()}
             className="neo-panel__btn neo-panel__btn--ghost"
           >
-            {loading ? 'Actualizando…' : 'Actualizar'}
+            {loading || pendingLoading ? 'Actualizando…' : 'Actualizar'}
           </button>
         </div>
       </header>
@@ -424,6 +499,41 @@ export function DailyPanelPage({
           onAddManualCall={() => setManualOpen(true)}
         />
       </section>
+
+      <section className="neo-panel__module neo-panel__module--spaced">
+        <div className="neo-panel__module-head">
+          <h2 className="neo-panel__module-title">Agendas sin punto de agenda</h2>
+          <p className="neo-panel__module-hint">
+            {pendingMonthLabel} · {pendingCountLabel}
+          </p>
+        </div>
+        <p className="neo-panel__module-desc">
+          Leads que agendaron en el mes y todavía no tienen punto de agenda. El setter debe completarlos.
+        </p>
+        <PendingAgendaTable
+          items={pendingAgenda}
+          monthLabel={pendingMonthLabel}
+          setterOptions={setterOptions}
+          loading={pendingLoading}
+          onAssign={(lead) => setAgendaModalLead(lead)}
+          onSetterChange={handleSetterChange}
+        />
+      </section>
+
+      <AgendaPointPickerModal
+        open={Boolean(agendaModalLead)}
+        modalTitle="Punto de agenda"
+        onClose={() => setAgendaModalLead(null)}
+        hasAssignedPuntoAgenda={false}
+        onSavePuntoAgenda={async (value) => {
+          if (!agendaModalLead) return
+          await handleAssignAgendaPoint(agendaModalLead.id, value)
+          setAgendaModalLead(null)
+        }}
+        onCacheReel={() => undefined}
+        onCacheSequence={() => undefined}
+        onCacheYoutube={() => undefined}
+      />
 
       {manualOpen ? (
         <div className="neo-manual-call">

@@ -493,6 +493,10 @@ class LeadOut(BaseModel):
     )
     ingresos_mensuales: float = 0
     ingresos_rango: str | None = None
+    formulario: str | None = Field(
+        default=None,
+        description="Respuestas completas del formulario pre-agenda Calendly (columna formulario).",
+    )
     compromiso: str | None = None
     urgencia: str | None = None
     disposicion_invertir: str | None = None
@@ -823,7 +827,7 @@ class AgentResumenOut(BaseModel):
     close_rate: float
     show_rate: float
     tasa_agendamiento: float
-    ticket_promedio: float
+    aov: float
     cash_por_chat: float
     programas: list[AgentResumenProgramaOut] = Field(default_factory=list)
     por_semana: AgentResumenPorSemanaOut
@@ -906,6 +910,23 @@ class AgentLlamadasHoyOut(BaseModel):
 class LlamadasHoyOut(BaseModel):
     fecha: str
     llamadas: list[AgentLlamadaHoyItemOut] = Field(default_factory=list)
+
+
+class LeadSinPuntoAgendaItemOut(BaseModel):
+    id: int
+    client_name: str = ""
+    ig_handle: str | None = None
+    scheduled_at: str | None = Field(
+        default=None,
+        description="Fecha/hora de la llamada (columna call).",
+    )
+    agendo: str | None = None
+    setter: str | None = None
+
+
+class LeadsSinPuntoAgendaOut(BaseModel):
+    month: str
+    leads: list[LeadSinPuntoAgendaItemOut] = Field(default_factory=list)
 
 
 class AgentProximaLlamadaItemOut(BaseModel):

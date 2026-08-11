@@ -51,6 +51,8 @@ export type Lead = {
   dolores_llamada: string | null
   razon_compra: string | null
   ingresos_rango?: string | null
+  /** Respuestas completas del pre-agenda Calendly (columna formulario). */
+  formulario?: string | null
   /** Días desde 1er contacto hasta formulario Calendly (API calculado). */
   dias_agendamiento: number | null
   ingresos_mensuales: number
@@ -201,16 +203,17 @@ export function buildColumns(
     { key: 'ig_handle', label: 'IG', width: 130, type: 'text', editable: true, defaultVisible: true },
     { key: 'phone', label: 'Tel', width: 140, type: 'text', editable: true, defaultVisible: true },
     { key: 'email', label: 'Email', width: 180, type: 'text', editable: false, defaultVisible: true },
+    { key: 'formulario', label: 'Formulario', width: 120, type: 'text', editable: false, defaultVisible: true },
     { key: 'avatar_type', label: 'Avatar', width: 170, type: 'badge', editable: true, options: avatarOpts, colors: avatarColors, defaultVisible: true },
     // Estado y equipo
     { key: 'status', label: 'Status', width: 130, type: 'select', editable: true, options: STATUS_OPTIONS, colors: STATUS_COLORS, defaultVisible: true },
     { key: 'origin', label: 'Origen', width: 200, type: 'select', editable: true, options: [...ORIGIN_OPTIONS], colors: ORIGIN_COLORS, defaultVisible: true },
     // entry_funnel (keyword) no se muestra en esta vista
     { key: 'agenda_point', label: 'Pto agenda', width: 160, type: 'badge', editable: false, options: [''], colors: {}, defaultVisible: true },
-    { key: 'entry_channel', label: '1er ingreso embudo', width: 180, type: 'badge', editable: false, options: [''], colors: {}, defaultVisible: true },
-    { key: 'ctas_responded', label: 'CTAs resp.', width: 90, type: 'number', editable: true, defaultVisible: true },
+    { key: 'entry_channel', label: '1er ingreso embudo', width: 180, type: 'badge', editable: false, options: [''], colors: {}, defaultVisible: false },
+    { key: 'ctas_responded', label: 'CTAs resp.', width: 90, type: 'number', editable: true, defaultVisible: false },
     // Fechas
-    { key: 'first_contact_at', label: '1er contacto', width: 120, type: 'date', editable: true, defaultVisible: true },
+    { key: 'first_contact_at', label: '1er contacto', width: 120, type: 'date', editable: true, defaultVisible: false },
     { key: 'agendo', label: 'Agendo', width: 120, type: 'date', editable: true, defaultVisible: true },
     { key: 'scheduled_at', label: 'Call', width: 110, type: 'date', editable: true, defaultVisible: true },
     { key: 'dias_agendamiento', label: 'Días p/ agendar', width: 100, type: 'number', editable: false, defaultVisible: true },
@@ -225,7 +228,7 @@ export function buildColumns(
     { key: 'call_link', label: 'Link de llamada', width: 130, type: 'link', editable: true, defaultVisible: true },
     { key: 'dolores_llamada', label: 'Dolores llamada', width: 200, type: 'text', editable: true, defaultVisible: false },
     { key: 'razon_compra', label: 'Razón compra', width: 100, type: 'text', editable: true, defaultVisible: false },
-    { key: 'ingresos_lead', label: 'Ingresos', width: 160, type: 'text', editable: false, defaultVisible: true },
+    { key: 'ingresos_lead', label: 'Ingresos', width: 160, type: 'text', editable: false, defaultVisible: false },
     { key: 'ingresos_mensuales', label: 'Ingresos lead ($)', width: 130, type: 'currency', editable: true, defaultVisible: false },
     // Venta
     {

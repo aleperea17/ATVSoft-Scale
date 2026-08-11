@@ -351,17 +351,60 @@ def _find_calendly_answer(questions: list[dict], *keywords: str) -> str:
     return ""
 
 
+def _qna_sort_key(item: dict) -> tuple[int, str]:
+    raw = item.get("position")
+    try:
+        pos = int(raw) if raw is not None else 10_000
+    except (TypeError, ValueError):
+        pos = 10_000
+    return pos, str(item.get("question") or "")
+
+
+def _format_calendly_formulario(questions: list[dict]) -> str:
+    """Todas las Q&A del pre-agenda, en texto legible para la columna `formulario`."""
+    lines: list[str] = []
+    for item in sorted(questions, key=_qna_sort_key):
+        q = str(item.get("question") or "").strip()
+        a = str(item.get("answer") or "").strip()
+        if not q and not a:
+            continue
+        if q and a:
+            lines.append(f"{q}\n{a}")
+        elif q:
+            lines.append(q)
+        else:
+            lines.append(a)
+    return "\n\n".join(lines).strip()
+
+
 def _extract_calendly_form_fields(flat: dict, inner: dict | None = None) -> dict[str, str]:
     """Mapea Q&A del formulario Calendly → campos Lead."""
     qa = _calendly_questions(flat, inner)
     phone = (
-        _find_calendly_answer(qa, "número de teléfono", "numero de telefono", "teléfono", "telefono", "phone")
+        _find_calendly_answer(
+            qa,
+            "número de teléfono",
+            "numero de telefono",
+            "teléfono",
+            "telefono",
+            "phone",
+            "recordatorio de la reunión",
+            "recordatorio de la reunion",
+        )
         or str(flat.get("text_reminder_number") or (inner or {}).get("text_reminder_number") or "").strip()
     )
+    ig = _find_calendly_answer(qa, "instagram", "tu ig", "usuario ig").lstrip("@")
     return {
         "phone": phone,
+        "ig": ig,
         "ingresos_rango": _find_calendly_answer(
             qa,
+            "dispuesta a invertir",
+            "dispuesto a invertir",
+            "invertir en tu recuperación",
+            "invertir en tu recuperacion",
+            "cuánto estarías dispuesta",
+            "cuanto estarias dispuesta",
             "con cuánto dinero",
             "con cuanto dinero",
             "cuánto dinero cuentas",
@@ -369,7 +412,22 @@ def _extract_calendly_form_fields(flat: dict, inner: dict | None = None) -> dict
             "inversión tanto de tiempo",
             "inversion tanto de tiempo",
         ),
-        "compromiso": _find_calendly_answer(qa, "comprometidas", "realmente comprometidas"),
+        "compromiso": _find_calendly_answer(
+            qa,
+            "comprometidas",
+            "realmente comprometidas",
+            "100% segura",
+            "100% seguro",
+            "acceder a esta llamada",
+        ),
+        "agendo_en_form": _find_calendly_answer(
+            qa,
+            "desde dónde agendas",
+            "desde donde agendas",
+            "desde dónde agenda",
+            "desde donde agenda",
+        ),
+        "formulario": _format_calendly_formulario(qa),
     }
 
 
@@ -377,9 +435,15 @@ def _apply_calendly_form_fields(row: Lead, fields: dict[str, str]) -> None:
     phone = (fields.get("phone") or "").strip()
     if phone:
         row.telefono = phone
+    ig = (fields.get("ig") or "").strip().lstrip("@")
+    if ig and not (row.ig or "").strip():
+        row.ig = ig
     ingresos = (fields.get("ingresos_rango") or "").strip()
     if ingresos:
         row.ingresos_rango = ingresos
+    formulario = (fields.get("formulario") or "").strip()
+    if formulario:
+        row.formulario = formulario
     compromiso = (fields.get("compromiso") or "").strip()
     if compromiso:
         marker = f"Compromiso Calendly: {compromiso}"

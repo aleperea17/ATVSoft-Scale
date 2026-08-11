@@ -196,6 +196,8 @@ class Lead(db.Entity):
     estado = Optional(str, default="")
     calificacion_llamada = Optional(str, default="")
     notas = Optional(str, default="")
+    # Respuestas completas del formulario pre-agenda Calendly (Q&A)
+    formulario = Optional(str, default="")
     recordatorio_enviado = Optional(bool, default=False)
     created_at = Required(datetime, default=lambda: datetime.utcnow())
 

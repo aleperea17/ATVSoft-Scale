@@ -1197,25 +1197,34 @@ export function LeadsPage() {
 
       {/* ━━ MODAL (text preview) ━━ */}
       {textPreview && (
-        <Modal open={!!textPreview} onClose={() => setTextPreview(null)} title={textPreview.title} maxWidth="750px">
-          <div className="max-h-[70vh] overflow-y-auto pr-2 space-y-1">
-            {textPreview.text.replace(/\\n/g, '\n').split('\n').map((line, i) => {
-              const trimmed = line.trim()
-              if (!trimmed) return <div key={i} className="h-2" />
-              const isBullet = trimmed.startsWith('•') || trimmed.startsWith('–') || trimmed.startsWith('-')
-              const isHeader = trimmed.endsWith(':') || trimmed.includes('?:') || trimmed.startsWith('📋') || trimmed.startsWith('FICHA')
-              const isSubValue = !isBullet && !isHeader && i > 0
-              if (isHeader) return (
-                <p key={i} className="text-[13px] font-semibold text-[var(--text)] mt-4 mb-1 border-b border-[var(--border)] pb-1">{trimmed}</p>
-              )
-              if (isBullet) return (
-                <p key={i} className="text-[13px] leading-relaxed text-[var(--text2)] pl-3">{trimmed}</p>
-              )
-              return (
-                <p key={i} className={`text-[13px] leading-relaxed ${isSubValue ? 'text-[var(--text2)]' : 'text-[var(--text)]'}`}>{trimmed}</p>
-              )
-            })}
-          </div>
+        <Modal
+          open={!!textPreview}
+          onClose={() => setTextPreview(null)}
+          title={textPreview.title}
+          maxWidth={isFormularioPreviewTitle(textPreview.title) ? '640px' : '750px'}
+        >
+          {isFormularioPreviewTitle(textPreview.title) ? (
+            <FormularioPreviewBody text={textPreview.text} />
+          ) : (
+            <div className="max-h-[70vh] overflow-y-auto pr-2 space-y-1">
+              {textPreview.text.replace(/\\n/g, '\n').split('\n').map((line, i) => {
+                const trimmed = line.trim()
+                if (!trimmed) return <div key={i} className="h-2" />
+                const isBullet = trimmed.startsWith('•') || trimmed.startsWith('–') || trimmed.startsWith('-')
+                const isHeader = trimmed.endsWith(':') || trimmed.includes('?:') || trimmed.startsWith('📋') || trimmed.startsWith('FICHA')
+                const isSubValue = !isBullet && !isHeader && i > 0
+                if (isHeader) return (
+                  <p key={i} className="text-[13px] font-semibold text-[var(--text)] mt-4 mb-1 border-b border-[var(--border)] pb-1">{trimmed}</p>
+                )
+                if (isBullet) return (
+                  <p key={i} className="text-[13px] leading-relaxed text-[var(--text2)] pl-3">{trimmed}</p>
+                )
+                return (
+                  <p key={i} className={`text-[13px] leading-relaxed ${isSubValue ? 'text-[var(--text2)]' : 'text-[var(--text)]'}`}>{trimmed}</p>
+                )
+              })}
+            </div>
+          )}
         </Modal>
       )}
     </div>
@@ -1430,7 +1439,66 @@ function LeadsTable({
 // LEAD TABLE CELL
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 /** Campos con respuesta larga: en la grilla solo «Abrir» → modal con texto completo. */
-const MODAL_TEXT_CELL_KEYS = ['ingresos_lead'] as const
+const MODAL_TEXT_CELL_KEYS = ['ingresos_lead', 'formulario'] as const
+
+function isFormularioPreviewTitle(title: string): boolean {
+  return title.trim().toLocaleLowerCase('es') === 'formulario'
+}
+
+type FormularioQaPair = { question: string; answer: string }
+
+/** Parsea el texto `pregunta\\nrespuesta` (bloques separados por línea en blanco). */
+function parseFormularioQa(text: string): FormularioQaPair[] {
+  const normalized = text.replace(/\\n/g, '\n').replace(/\r\n/g, '\n').trim()
+  if (!normalized) return []
+
+  const blocks = normalized.split(/\n\s*\n+/).map((b) => b.trim()).filter(Boolean)
+  const pairs: FormularioQaPair[] = []
+
+  for (const block of blocks) {
+    const lines = block.split('\n').map((l) => l.trim()).filter(Boolean)
+    if (lines.length === 0) continue
+    if (lines.length === 1) {
+      pairs.push({ question: lines[0], answer: '' })
+      continue
+    }
+    pairs.push({
+      question: lines[0],
+      answer: lines.slice(1).join('\n'),
+    })
+  }
+  return pairs
+}
+
+function FormularioPreviewBody({ text }: { text: string }) {
+  const pairs = parseFormularioQa(text)
+  if (pairs.length === 0) {
+    return <p className="text-[13px] text-[var(--text3)]">Sin respuestas del formulario.</p>
+  }
+
+  return (
+    <div className="max-h-[70vh] overflow-y-auto pr-1 space-y-3">
+      {pairs.map((pair, i) => (
+        <div
+          key={`${i}-${pair.question.slice(0, 24)}`}
+          className="rounded-lg border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-4 py-3"
+        >
+          <div className="mb-2 flex items-start gap-2.5">
+            <span className="mt-0.5 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md bg-[rgba(230,57,70,0.15)] px-1.5 text-[10px] font-semibold tabular-nums text-[var(--accent)]">
+              {i + 1}
+            </span>
+            <p className="text-[12px] font-medium leading-snug text-[var(--text3)]">
+              {pair.question}
+            </p>
+          </div>
+          <p className="pl-[1.875rem] text-[14px] font-medium leading-relaxed text-[var(--text)] whitespace-pre-wrap">
+            {pair.answer || '—'}
+          </p>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 function AbrirTextoModalCell({
   text,
