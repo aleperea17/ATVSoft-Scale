@@ -3,16 +3,29 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 from pony.orm import db_session
 
+from src.env_public import public_site_url
 from src.models import ApiConnection
 from src.schemas import ApiConnectionResponse, ApiConnectionUpsertRequest
 from src.services.anthropic_service import invalidate_claude_status_cache
+from src.services.calendly_webhook_service import ensure_calendly_webhook_subscription
 
-_CALENDLY_CREDENTIAL_KEYS = frozenset({"api_key", "signing_key"})
+_CALENDLY_CREDENTIAL_KEYS = frozenset({"api_key", "signing_key", "webhook_subscription_uri"})
 
 
 def _sanitize_calendly_credentials(creds: dict) -> dict:
-    """Solo persiste PAT y signing key; ignora q_* legacy."""
+    """Solo persiste PAT / signing key / uri de webhook; ignora q_* legacy."""
     return {k: str(v) if v is not None else "" for k, v in creds.items() if k in _CALENDLY_CREDENTIAL_KEYS}
+
+
+def _enrich_calendly_webhook_credentials(credentials: dict) -> dict:
+    """Registra webhook en Calendly si hay PAT; nunca falla el upsert si Calendly falla."""
+    new_key = str(credentials.get("api_key") or "").strip()
+    if not new_key:
+        return credentials
+    webhook_data = ensure_calendly_webhook_subscription(new_key, public_site_url())
+    if not webhook_data:
+        return credentials
+    return {**credentials, **webhook_data}
 
 
 class ConexionesServices:
@@ -73,11 +86,13 @@ class ConexionesServices:
             raise HTTPException(status_code=400, detail="La plataforma no puede estar vacía.")
         platform = platform.strip()
         now = datetime.now(timezone.utc)
+
         with db_session:
             user_rows = [c for c in list(ApiConnection.select()) if c.user_id == user_id]
             matches = [c for c in user_rows if c.platform == platform]
             matches.sort(key=lambda c: c.id)
             existing = matches[0] if matches else None
+            existing_id = int(existing.id) if existing else None
             incoming_credentials = dict(body.credentials or {})
             if platform.lower() == "calendly":
                 incoming_credentials = _sanitize_calendly_credentials(incoming_credentials)
@@ -96,28 +111,32 @@ class ConexionesServices:
                         for key in ("token_saved_at", "token_expires_at"):
                             if key not in incoming_credentials and key in previous_credentials:
                                 incoming_credentials[key] = previous_credentials[key]
+            elif platform.lower() == "instagram" and str(incoming_credentials.get("access_token") or "").strip():
+                incoming_credentials = {
+                    **incoming_credentials,
+                    "token_saved_at": self._iso_utc(now),
+                    "token_expires_at": self._iso_utc(now + timedelta(days=60)),
+                }
+
+        # HTTP a Calendly fuera de la sesión Pony (no bloquear Postgres).
+        if platform.lower() == "calendly":
+            incoming_credentials = _enrich_calendly_webhook_credentials(incoming_credentials)
+
+        with db_session:
+            if existing_id is not None:
+                existing = ApiConnection.get(id=existing_id)
+                if existing is None:
+                    raise HTTPException(status_code=404, detail="Conexión no encontrada.")
                 existing.credentials = incoming_credentials
                 existing.updated_at = now
                 if platform.lower() == "claude":
                     invalidate_claude_status_cache(user_id)
                 return self._to_response(existing)
+
             row = ApiConnection(
                 user_id=user_id,
                 platform=platform,
-                credentials=(
-                    {
-                        **incoming_credentials,
-                        **(
-                            {
-                                "token_saved_at": self._iso_utc(now),
-                                "token_expires_at": self._iso_utc(now + timedelta(days=60)),
-                            }
-                            if platform.lower() == "instagram"
-                            and str(incoming_credentials.get("access_token") or "").strip()
-                            else {}
-                        ),
-                    }
-                ),
+                credentials=incoming_credentials,
                 updated_at=now,
             )
             if platform.lower() == "claude":
