@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import { useToast } from '@/shared/components/toast'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
-import { resolveMediaUrl } from '@/shared/lib/backend-public-url'
+import { contentImageSrc } from '@/shared/lib/content-image-url'
 
 const AR_TZ = 'America/Argentina/Buenos_Aires'
 
@@ -54,20 +54,14 @@ function formatSequenceDate(isoDate: string): string {
 
 function SequenceChatCard({ sequence }: { sequence: SequenceSummary }) {
   const [imgErr, setImgErr] = useState(false)
-  const rawThumb = sequence.thumbnail_url?.trim() || ''
-  const resolved = rawThumb ? resolveMediaUrl(rawThumb) : ''
-  const thumb =
-    resolved && !imgErr
-      ? resolved.startsWith('http')
-        ? `/api/proxy-image?url=${encodeURIComponent(resolved)}`
-        : resolved
-      : ''
+  const thumb = !imgErr ? contentImageSrc(sequence.thumbnail_url) : ''
 
   return (
     <div className="glass-card overflow-hidden">
       <div className="relative">
         {thumb ? (
           <img
+            key={sequence.thumbnail_url || sequence.sequence_id}
             src={thumb}
             alt=""
             className="h-44 w-full object-cover"

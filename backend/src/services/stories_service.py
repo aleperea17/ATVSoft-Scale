@@ -137,6 +137,65 @@ def _sequence_thumbnail(sequence: StorySequence) -> str | None:
     return None
 
 
+def _media_root() -> str:
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.normpath(os.path.join(base_dir, "..", "..", "media"))
+
+
+def _local_media_file_exists(image_url: str | None) -> bool:
+    raw = (image_url or "").strip()
+    if not raw.startswith("/media/"):
+        return False
+    rel = raw[len("/media/") :].lstrip("/")
+    filepath = os.path.join(_media_root(), rel)
+    return os.path.isfile(filepath)
+
+
+def _fetch_instagram_media_preview_url(media_id: str, access_token: str) -> str | None:
+    mid = (media_id or "").strip()
+    token = (access_token or "").strip()
+    if not mid or not token:
+        return None
+    url = (
+        f"https://graph.facebook.com/v25.0/{urllib.parse.quote(mid)}"
+        "?fields=media_type,media_url,thumbnail_url"
+    )
+    try:
+        payload = _http_json(
+            url,
+            {"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            timeout=12,
+        )
+        media_type = str(payload.get("media_type") or "").upper()
+        thumb = str(payload.get("thumbnail_url") or "").strip()
+        media = str(payload.get("media_url") or "").strip()
+        if media_type == "VIDEO" and thumb:
+            return thumb
+        return media or thumb or None
+    except Exception as e:
+        print(f"[stories] preview URL falló para {mid}: {e}")
+        return None
+
+
+def _sequence_display_thumbnail(sequence: StorySequence, user_id: str, access_token: str | None) -> str | None:
+    slides = _dedupe_slides_for_response(sorted(list(sequence.slides), key=lambda s: (s.order_index, s.id)))
+    token = (access_token or "").strip()
+    for slide in slides:
+        url = (slide.image_url or "").strip()
+        if url.startswith("http://") or url.startswith("https://"):
+            return url
+        if url.startswith("/media/") and _local_media_file_exists(url):
+            return url
+        mid = str(slide.instagram_media_id or "").strip()
+        if mid and token:
+            remote = _fetch_instagram_media_preview_url(mid, token)
+            if remote:
+                slide.image_url = remote
+                flush()
+                return remote
+    return None
+
+
 def _serialize_sequence(sequence: StorySequence, user_id: str) -> dict[str, Any]:
     slides_raw = sorted(list(sequence.slides), key=lambda s: (s.order_index, s.id))
     slides = _dedupe_slides_for_response(slides_raw)
@@ -251,14 +310,11 @@ def _instagram_api_error_detail(e: urllib.error.HTTPError) -> tuple[int, str]:
     return status, detail
 
 
-def _http_json(url: str, headers: dict[str, str]) -> dict[str, Any]:
+def _http_json(url: str, headers: dict[str, str], timeout: int = 45) -> dict[str, Any]:
     req = urllib.request.Request(url, headers=headers, method="GET")
     ssl_ctx = ssl.create_default_context(cafile=certifi.where())
-    with urllib.request.urlopen(req, timeout=45, context=ssl_ctx) as response:
+    with urllib.request.urlopen(req, timeout=timeout, context=ssl_ctx) as response:
         payload = response.read().decode("utf-8")
-    return json.loads(payload) if payload else {}
-
-
     return json.loads(payload) if payload else {}
 
 
@@ -468,6 +524,12 @@ class StoriesService:
         ]
         rows.sort(key=lambda s: (s.sequence_date, s.id), reverse=True)
 
+        access_token = ""
+        try:
+            access_token, _ = self._resolve_instagram_conn(user_id)
+        except HTTPException:
+            access_token = ""
+
         summaries: list[dict[str, Any]] = []
         total_chats = 0
         for row in rows:
@@ -480,7 +542,7 @@ class StoriesService:
                     "sequence_id": str(row.id),
                     "label": _sequence_label(row),
                     "sequence_date": row.sequence_date.isoformat(),
-                    "thumbnail_url": _sequence_thumbnail(row),
+                    "thumbnail_url": _sequence_display_thumbnail(row, user_id, access_token),
                     "chats": chats,
                     "agendas": int(serialized.get("agendas") or 0),
                     "has_cta": bool(serialized.get("has_cta")),
@@ -1032,6 +1094,8 @@ class StoriesService:
                             thumb_url = str(raw.get("thumbnail_url") or "").strip()
                             source_url = thumb_url if media_type == "VIDEO" and thumb_url else media_url or thumb_url
                             image_url = await download_story_image(source_url, user_id, story_id) if source_url else None
+                            if not image_url and source_url:
+                                image_url = source_url
 
                             metrics, perm_denied = _fetch_story_insights(story_id, access_token, headers)
                             if perm_denied:

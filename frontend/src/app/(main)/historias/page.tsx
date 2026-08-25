@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useToast } from '@/shared/components/toast'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
 import { formatCash } from '@/shared/lib/format-utils'
-import { resolveMediaUrl } from '@/shared/lib/backend-public-url'
+import { contentImageSrc } from '@/shared/lib/content-image-url'
 import { Line } from '@/shared/components/charts'
 import { apiFetch } from '@/lib/api'
 import { LineChart, Line as ReLine, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
@@ -86,7 +86,7 @@ type SyncStatus = {
 type YTVideo = { id: string; title: string }
 const UNDO_DURATION = 6000
 const INSTAGRAM_TOKEN_WARN_DAYS_LEFT = 5
-const getImageUrl = (url: string | null | undefined) => resolveMediaUrl(url)
+const getImageUrl = (url: string | null | undefined) => contentImageSrc(url)
 const toNumber = (v: unknown) => {
   if (typeof v === 'number') return Number.isFinite(v) ? v : 0
   if (typeof v === 'string') {
