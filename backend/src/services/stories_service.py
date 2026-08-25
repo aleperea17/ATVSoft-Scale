@@ -120,6 +120,23 @@ def _dedupe_slides_for_response(slides: list[StorySlide]) -> list[StorySlide]:
     return out
 
 
+def _sequence_label(sequence: StorySequence) -> str:
+    title = (sequence.title or "").strip()
+    if title:
+        return title
+    d = sequence.sequence_date
+    return f"Secuencia {d.day:02d}/{d.month:02d}/{d.year}"
+
+
+def _sequence_thumbnail(sequence: StorySequence) -> str | None:
+    slides = _dedupe_slides_for_response(sorted(list(sequence.slides), key=lambda s: (s.order_index, s.id)))
+    for slide in slides:
+        url = (slide.image_url or "").strip()
+        if url:
+            return url
+    return None
+
+
 def _serialize_sequence(sequence: StorySequence, user_id: str) -> dict[str, Any]:
     slides_raw = sorted(list(sequence.slides), key=lambda s: (s.order_index, s.id))
     slides = _dedupe_slides_for_response(slides_raw)
@@ -438,6 +455,42 @@ class StoriesService:
             import traceback
             traceback.print_exc()
             raise
+
+    @db_session
+    def get_sequences_summary(self, user_id: str, month: str) -> dict[str, Any]:
+        year, month_num = map(int, month.split("-"))
+        rows = [
+            s
+            for s in list(StorySequence.select())
+            if s.user_id == int(user_id)
+            and s.sequence_date.year == year
+            and s.sequence_date.month == month_num
+        ]
+        rows.sort(key=lambda s: (s.sequence_date, s.id), reverse=True)
+
+        summaries: list[dict[str, Any]] = []
+        total_chats = 0
+        for row in rows:
+            serialized = _serialize_sequence(row, user_id)
+            chats = int(serialized.get("chats") or 0)
+            total_chats += chats
+            slides = serialized.get("slides") or []
+            summaries.append(
+                {
+                    "sequence_id": str(row.id),
+                    "label": _sequence_label(row),
+                    "sequence_date": row.sequence_date.isoformat(),
+                    "thumbnail_url": _sequence_thumbnail(row),
+                    "chats": chats,
+                    "agendas": int(serialized.get("agendas") or 0),
+                    "has_cta": bool(serialized.get("has_cta")),
+                    "dolor": (row.dolor or "").strip() or None,
+                    "slides_count": len(slides),
+                }
+            )
+
+        summaries.sort(key=lambda s: (-int(s["chats"]), s["sequence_date"], s["label"]))
+        return {"sequences": summaries, "total_chats": total_chats}
 
     @db_session
     def get_all_sequences(self, user_id: str) -> list[dict[str, Any]]:

@@ -8,6 +8,7 @@ from src.services.stories_service import StoriesService
 from src.services.sync_scheduler_service import (
     CALENDLY_JOB_ID,
     REELS_JOB_ID,
+    REELS_NEW_SYNC_JOB_ID,
     STORIES_JOB_ID,
     apply_sync_schedules,
     next_job_run_time,
@@ -53,6 +54,7 @@ def _build_out() -> SyncSettingsOut:
         calendly_interval_minutes=data["calendly_interval_minutes"],
         stories_next_sync=_iso_dt(next_job_run_time(STORIES_JOB_ID)) if auto_on else None,
         reels_next_sync=_iso_dt(next_job_run_time(REELS_JOB_ID)) if auto_on else None,
+        reels_new_sync_next=_iso_dt(next_job_run_time(REELS_NEW_SYNC_JOB_ID)) if auto_on else None,
         calendly_next_sync=_iso_dt(next_job_run_time(CALENDLY_JOB_ID)) if auto_on else None,
         auto_sync_enabled=auto_on,
         min_interval_minutes=MIN_SYNC_INTERVAL_MINUTES,

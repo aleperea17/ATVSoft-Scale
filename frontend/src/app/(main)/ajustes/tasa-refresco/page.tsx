@@ -11,6 +11,7 @@ type SyncSettings = {
   calendly_interval_minutes: number
   stories_next_sync: string | null
   reels_next_sync: string | null
+  reels_new_sync_next: string | null
   calendly_next_sync: string | null
   auto_sync_enabled?: boolean
   min_interval_minutes: number
@@ -253,7 +254,7 @@ export default function TasaRefrescoPage() {
         />
         <IntervalField
           label="Reels"
-          description="Refresh de métricas en BD para reels ya importados (views, reach, likes, etc.)."
+          description="Refresh de métricas en BD para reels ya importados (views, reach, likes, etc.). A las 23:59 (Argentina) corre además un job fijo que busca reels nuevos y refresca métricas."
           value={reelsMin}
           disabled={saving}
           min={min}
@@ -263,6 +264,15 @@ export default function TasaRefrescoPage() {
           onChange={setReelsMin}
           onPreset={(m) => setReelsMin(String(m))}
         />
+        {settings?.auto_sync_enabled !== false && settings?.reels_new_sync_next ? (
+          <p className="-mt-4 text-[11px] text-[var(--text3)]">
+            Próximo sync automático de reels (nuevos + métricas):{' '}
+            <span className="font-medium text-[var(--text2)]">
+              {formatNextRun(settings.reels_new_sync_next)}
+            </span>{' '}
+            (23:59 Argentina — «Buscar nuevos reels» y «Actualizar métricas»).
+          </p>
+        ) : null}
         <IntervalField
           label="Calendly"
           description="Check liviano periódico; solo si hay novedades sincroniza leads. El botón «Sincronizar» en Leads siempre trae los datos."

@@ -41,6 +41,7 @@ from src.services.reels_services import ReelsServices
 from src.services.sync_scheduler_service import (
     CALENDLY_JOB_ID,
     REELS_JOB_ID,
+    REELS_NEW_SYNC_JOB_ID,
     STORIES_JOB_ID,
     apply_sync_schedules,
     bind_sync_scheduler,
@@ -98,6 +99,31 @@ async def auto_refresh_reels_metrics() -> None:
                 print(f"[scheduler] Reels refresh-metrics FAILED para {user_id}: {e}")
     except Exception as e:
         print(f"[scheduler] Error general en auto_refresh_reels_metrics: {e}")
+
+
+async def auto_sync_new_reels() -> None:
+    """Job diario 23:59 AR: busca reels nuevos y actualiza métricas (mismos flujos que los botones en /reels)."""
+    try:
+        with db_session:
+            _ = db
+            connections = list(ApiConnection.select().filter(lambda c: c.platform == "instagram"))
+            user_ids = [c.user_id for c in connections]
+
+        service = ReelsServices()
+        for user_id in user_ids:
+            uid = str(user_id)
+            try:
+                sync_result = await service.sync_instagram(uid)
+                print(f"[scheduler] Reels buscar-nuevos OK para {uid}: {sync_result}")
+            except Exception as e:
+                print(f"[scheduler] Reels buscar-nuevos FAILED para {uid}: {e}")
+            try:
+                metrics_result = await service.refresh_metrics(uid)
+                print(f"[scheduler] Reels refresh-metrics OK para {uid}: {metrics_result}")
+            except Exception as e:
+                print(f"[scheduler] Reels refresh-metrics FAILED para {uid}: {e}")
+    except Exception as e:
+        print(f"[scheduler] Error general en auto_sync_new_reels: {e}")
 
 
 async def auto_sync_calendly() -> None:
@@ -173,6 +199,12 @@ async def lifespan(_: FastAPI):
             id=CLOSER_DAILY_REPORT_JOB_ID,
             replace_existing=True,
         )
+        scheduler.add_job(
+            auto_sync_new_reels,
+            trigger=CronTrigger(hour=23, minute=59, timezone=AR_TZ),
+            id=REELS_NEW_SYNC_JOB_ID,
+            replace_existing=True,
+        )
         bind_sync_scheduler(scheduler)
         apply_sync_schedules()
         scheduler.start()
@@ -188,6 +220,7 @@ async def lifespan(_: FastAPI):
             f"(check liviano -> sync solo si hay novedades)"
         )
         print("[scheduler] Reporte closer ventas automático diario a las 23:00 (Argentina)")
+        print("[scheduler] Reels automático diario a las 23:59 (Argentina): buscar nuevos + actualizar métricas")
     else:
         print(
             "[scheduler] Auto-sync DESACTIVADO (DISABLE_AUTO_SYNC=true). "

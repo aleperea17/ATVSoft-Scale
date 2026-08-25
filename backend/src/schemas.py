@@ -425,6 +425,23 @@ class StoriesMetricsOut(BaseModel):
     stories_sincronizadas: int
 
 
+class StoriesSequenceSummary(BaseModel):
+    sequence_id: str
+    label: str
+    sequence_date: str
+    thumbnail_url: str | None = None
+    chats: int = 0
+    agendas: int = 0
+    has_cta: bool = False
+    dolor: str | None = None
+    slides_count: int = 0
+
+
+class StoriesSequencesSummaryResponse(BaseModel):
+    sequences: list[StoriesSequenceSummary] = Field(default_factory=list)
+    total_chats: int = 0
+
+
 class YoutubeVideoPatchRequest(BaseModel):
     cash_manual: int | None = None
 
@@ -650,6 +667,21 @@ class KeywordsTopReel(BaseModel):
     rows: int = 0
 
 
+class KeywordsReelSummary(BaseModel):
+    reel_id: str
+    label: str
+    keyword: str | None = None
+    thumbnail_url: str | None = None
+    permalink: str | None = None
+    published_at: str | None = None
+    leads: int = 0
+
+
+class KeywordsReelsSummaryResponse(BaseModel):
+    reels: list[KeywordsReelSummary] = Field(default_factory=list)
+    total_leads: int = 0
+
+
 class KeywordsMetricsResponse(BaseModel):
     metrics: KeywordsMetrics = Field(default_factory=KeywordsMetrics)
     series_days: list[KeywordsSeriesDay] = Field(default_factory=list)
@@ -674,6 +706,7 @@ class SyncSettingsOut(BaseModel):
     calendly_interval_minutes: int = 360
     stories_next_sync: str | None = None
     reels_next_sync: str | None = None
+    reels_new_sync_next: str | None = None
     calendly_next_sync: str | None = None
     auto_sync_enabled: bool = True
     min_interval_minutes: int = 1

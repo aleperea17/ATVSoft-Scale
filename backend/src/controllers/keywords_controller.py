@@ -14,6 +14,8 @@ from src.schemas import (
     KeywordsMetrics,
     KeywordsMetricsResponse,
     KeywordsReelOption,
+    KeywordsReelSummary,
+    KeywordsReelsSummaryResponse,
     KeywordsSeriesDay,
     KeywordsTopKeyword,
     KeywordsTopReel,
@@ -145,6 +147,60 @@ def _staged_rows(
 
     staged.sort(key=lambda x: (x[0], x[1], x[2]))
     return staged
+
+
+def _lead_counts_by_reel(staged: list[tuple[float, int, str, KeywordClientRow]]) -> dict[str, set[str]]:
+    counts: dict[str, set[str]] = {}
+    for *_, row in staged:
+        rid = str(row.reel_id or "").strip()
+        if not rid:
+            continue
+        counts.setdefault(rid, set()).add(str(row.lead_id))
+    return counts
+
+
+@router.get("/reels-summary", response_model=KeywordsReelsSummaryResponse)
+def keywords_reels_summary(
+    user_id: Annotated[str, Depends(require_user_id)],
+) -> KeywordsReelsSummaryResponse:
+    try:
+        uid = int(user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="user_id inválido") from e
+
+    with db_session:
+        reels = [r for r in list(ReelContent.select()) if int(r.user_id) == uid]
+        leads = [r for r in list(LeadEntity.select()) if int(r.user_id) == uid]
+
+    staged = _staged_rows(reels=reels, leads=leads, reel_filter_id=None)
+    lead_counts = _lead_counts_by_reel(staged)
+
+    summaries: list[KeywordsReelSummary] = []
+    all_lead_ids: set[str] = set()
+
+    for reel in reels:
+        kw = (reel.keyword or "").strip()
+        if not kw:
+            continue
+        rid = str(reel.id)
+        matched_leads = lead_counts.get(rid, set())
+        all_lead_ids.update(matched_leads)
+        thumb = (reel.thumbnail_url or "").strip() or None
+        permalink = (reel.permalink or "").strip() or None
+        summaries.append(
+            KeywordsReelSummary(
+                reel_id=rid,
+                label=_reel_label_for_option(reel),
+                keyword=kw,
+                thumbnail_url=thumb,
+                permalink=permalink,
+                published_at=_reel_published_date_iso(reel),
+                leads=len(matched_leads),
+            )
+        )
+
+    summaries.sort(key=lambda s: (-s.leads, s.published_at or "", s.label))
+    return KeywordsReelsSummaryResponse(reels=summaries, total_leads=len(all_lead_ids))
 
 
 @router.get("", response_model=KeywordsListResponse)

@@ -18,6 +18,7 @@ from src.services.sync_settings_service import (
 AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 STORIES_JOB_ID = "auto_sync_stories"
 REELS_JOB_ID = "auto_refresh_reels_metrics"
+REELS_NEW_SYNC_JOB_ID = "auto_sync_new_reels"
 CALENDLY_JOB_ID = "auto_sync_calendly"
 
 _scheduler: Any | None = None

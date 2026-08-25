@@ -5,7 +5,13 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 import traceback
 
-from src.schemas import StoriesMetricsOut, StorySequenceIn, StorySequenceOut, StorySequencePatchRequest
+from src.schemas import (
+    StoriesMetricsOut,
+    StoriesSequencesSummaryResponse,
+    StorySequenceIn,
+    StorySequenceOut,
+    StorySequencePatchRequest,
+)
 from src.services.stories_service import StoriesService
 
 router = APIRouter(prefix="/api/stories", tags=["stories"], redirect_slashes=False)
@@ -42,6 +48,21 @@ def get_sequences(
         raise e
     except Exception:
         raise HTTPException(status_code=500, detail="Error inesperado al cargar secuencias de historias.")
+
+
+@router.get("/sequences-summary", response_model=StoriesSequencesSummaryResponse)
+def get_sequences_summary(
+    user_id: Annotated[str, Depends(get_current_user)],
+    month: str | None = Query(default=None, description="Formato YYYY-MM"),
+) -> StoriesSequencesSummaryResponse:
+    try:
+        effective_month = month or datetime.now(AR_TZ).strftime("%Y-%m")
+        data = service.get_sequences_summary(user_id, effective_month)
+        return StoriesSequencesSummaryResponse(**data)
+    except HTTPException as e:
+        raise e
+    except Exception:
+        raise HTTPException(status_code=500, detail="Error inesperado al cargar resumen de secuencias.")
 
 
 @router.post("/sequences", response_model=StorySequenceOut)
