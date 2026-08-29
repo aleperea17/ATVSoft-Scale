@@ -598,7 +598,11 @@ class ManualCallCreateRequest(BaseModel):
     hora: str = Field(
         min_length=4,
         max_length=5,
-        description="Hora Argentina HH:MM para la llamada de hoy.",
+        description="Hora Argentina HH:MM.",
+    )
+    fecha: date | None = Field(
+        default=None,
+        description="YYYY-MM-DD de la llamada; default hoy en Argentina.",
     )
     ig_handle: str | None = None
 

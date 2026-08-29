@@ -138,13 +138,99 @@
   text-shadow: 0 0 20px var(--neo-accent-glow);
 }
 
-.neo-panel__subtitle {
-  margin: 0.4rem 0 0;
+.neo-panel__date-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.45rem;
+  margin-top: 0.4rem;
   font-family: var(--neo-mono);
   font-size: 11px;
   letter-spacing: 0.08em;
   color: var(--neo-text2);
   text-transform: uppercase;
+}
+
+.neo-panel__date-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 1px solid var(--neo-border-dim);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--neo-hot);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    box-shadow 0.2s;
+}
+
+.neo-panel__date-arrow:hover {
+  border-color: var(--neo-accent);
+  background: rgba(230, 57, 70, 0.12);
+  box-shadow: 0 0 10px var(--neo-accent-dim);
+}
+
+.neo-panel__date-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 6.5rem;
+  cursor: pointer;
+}
+
+.neo-panel__date-label {
+  color: var(--neo-text2);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.neo-panel__date-trigger:hover .neo-panel__date-label {
+  color: var(--neo-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.neo-panel__date-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.01;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  color-scheme: dark;
+}
+
+.neo-panel__date-today {
+  margin-left: 0.15rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--neo-border);
+  border-radius: 4px;
+  background: var(--neo-accent-dim);
+  color: var(--neo-hot);
+  font-family: var(--neo-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.neo-panel__date-today:hover {
+  border-color: var(--neo-accent);
+  box-shadow: 0 0 10px var(--neo-accent-dim);
+}
+
+.neo-panel__date-tz {
+  color: var(--neo-text3);
 }
 
 .neo-panel__header-meta {

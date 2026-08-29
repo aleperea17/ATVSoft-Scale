@@ -69,11 +69,25 @@ function normalizeTeamCloser(closer: string, teamClosers: string[]): string | nu
   return teamClosers.find((n) => n.trim().toLowerCase() === needle) ?? null
 }
 
+const AR_TZ = 'America/Argentina/Buenos_Aires'
+
+function todayIsoInArgentina(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: AR_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+}
+
 export async function getDailyCalls(
   teamClosers: string[],
   defaultCloser: string,
+  fecha?: string,
 ): Promise<DailyCallsResponse> {
-  const res = await apiFetch('/leads/llamadas-hoy')
+  const q = new URLSearchParams()
+  if (fecha) q.set('fecha', fecha)
+  const res = await apiFetch(`/leads/llamadas-hoy${q.toString() ? `?${q}` : ''}`)
   const raw = (await res.json().catch(() => ({}))) as DailyCallsResponse & {
     detail?: string
     llamadas?: ApiDailyCallRow[]
@@ -84,12 +98,13 @@ export async function getDailyCalls(
 
   const llamadas: DailyCall[] = []
   const patchCloser: { id: number; closer: string }[] = []
+  const shouldPatchCloser = !fecha || fecha === todayIsoInArgentina()
 
   for (const row of Array.isArray(raw.llamadas) ? raw.llamadas : []) {
     const closerRaw = (row.closer || '').trim()
     const fromTeam = normalizeTeamCloser(closerRaw, teamClosers)
-    const effective = fromTeam ?? defaultCloser
-    if (effective !== closerRaw) {
+    const effective = fromTeam ?? (shouldPatchCloser ? defaultCloser : closerRaw)
+    if (effective !== closerRaw && shouldPatchCloser) {
       patchCloser.push({ id: row.id, closer: effective })
     }
     llamadas.push({
@@ -169,6 +184,7 @@ export async function createManualCall(input: ManualCallInput): Promise<void> {
       client_name: input.client_name.trim(),
       closer: input.closer.trim(),
       hora: input.hora.trim(),
+      fecha: input.fecha?.trim() || undefined,
       ig_handle: input.ig_handle?.trim() || null,
     }),
   })

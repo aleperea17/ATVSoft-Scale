@@ -29,6 +29,7 @@ type Props = {
   onProgramOfferedChange: (leadId: number, program: string) => Promise<void>
   onProgramadaOfrecidoChange: (leadId: number, program: string) => Promise<void>
   onAddManualCall?: () => void
+  emptyMessage?: string
 }
 
 function programSelectOptions(programOptions: string[], current: string): string[] {
@@ -446,6 +447,7 @@ export function DailyCallsTable({
   onProgramOfferedChange,
   onProgramadaOfrecidoChange,
   onAddManualCall,
+  emptyMessage = 'No hay llamadas agendadas para hoy.',
 }: Props) {
   if (loading && items.length === 0) {
     return <div className="neo-panel__loading">Cargando llamadas</div>
@@ -454,7 +456,7 @@ export function DailyCallsTable({
   if (items.length === 0) {
     return (
       <div className="neo-panel__empty neo-panel__empty--actions">
-        <p>No hay llamadas agendadas para hoy.</p>
+        <p>{emptyMessage}</p>
         {onAddManualCall ? (
           <button type="button" className="neo-panel__btn" onClick={onAddManualCall}>
             + Agregar llamada manual

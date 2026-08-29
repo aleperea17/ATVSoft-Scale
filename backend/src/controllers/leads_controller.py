@@ -20,7 +20,7 @@ from src.schemas import (
     LlamadasHoyOut,
     ManualCallCreateRequest,
 )
-from src.services.agent_closer_service import AR_TZ, list_llamadas_hoy
+from src.services.agent_closer_service import AR_TZ, list_llamadas_dia, list_llamadas_hoy
 from src.services.programs_services import (
     build_program_norm_price_map,
     program_price_usd_for_prog_raw,
@@ -391,7 +391,7 @@ def create_lead(
         return _to_lead_out(row, norm_prices)
 
 
-def _parse_call_hora_today(hora: str) -> datetime:
+def _parse_call_hora_on_date(hora: str, fecha: date) -> datetime:
     raw = (hora or "").strip()
     match = re.fullmatch(r"(\d{1,2}):(\d{2})", raw)
     if not match:
@@ -400,8 +400,7 @@ def _parse_call_hora_today(hora: str) -> datetime:
     minute = int(match.group(2))
     if not (0 <= hour <= 23 and 0 <= minute <= 59):
         raise HTTPException(status_code=400, detail="Hora inválida (usar HH:MM).")
-    hoy = datetime.now(AR_TZ).date()
-    return datetime.combine(hoy, time(hour=hour, minute=minute))
+    return datetime.combine(fecha, time(hour=hour, minute=minute))
 
 
 def _normalize_calificacion_llamada(raw: str | None) -> str:
@@ -422,9 +421,10 @@ def create_manual_call(
     except ValueError as e:
         raise HTTPException(status_code=400, detail="user_id inválido") from e
 
-    call_at = _parse_call_hora_today(body.hora)
+    target_date = body.fecha or datetime.now(AR_TZ).date()
+    call_at = _parse_call_hora_on_date(body.hora, target_date)
     now_ar = datetime.now(AR_TZ).replace(tzinfo=None)
-    anchor = datetime(now_ar.year, now_ar.month, 15, 15, 0, 0)
+    anchor = datetime(target_date.year, target_date.month, 15, 15, 0, 0)
 
     with db_session:
         row = LeadEntity(
@@ -522,13 +522,17 @@ def leads_sin_punto_agenda(
 @router.get("/llamadas-hoy", response_model=LlamadasHoyOut)
 def leads_llamadas_hoy(
     user_id: Annotated[str, Depends(require_user_id)],
+    fecha: date | None = Query(
+        default=None,
+        description="YYYY-MM-DD; default hoy en Argentina.",
+    ),
 ) -> LlamadasHoyOut:
     try:
         uid = int(user_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail="user_id inválido") from e
 
-    payload = list_llamadas_hoy(uid)
+    payload = list_llamadas_dia(uid, fecha) if fecha else list_llamadas_hoy(uid)
     return LlamadasHoyOut(**payload)
 
 
