@@ -433,6 +433,23 @@
   font-size: 11px;
 }
 
+.neo-agenda__ig-link {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.neo-agenda__ig-link:hover {
+  color: var(--neo-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .neo-agenda__call {
   font-family: var(--neo-mono);
   font-size: 11px;

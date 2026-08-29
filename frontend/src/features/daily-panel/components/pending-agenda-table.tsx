@@ -26,6 +26,31 @@ function formatCallLabel(iso: string | null): string {
   return `${date} ${time}`
 }
 
+function instagramUsername(igHandle: string): string {
+  const match = igHandle.match(/instagram\.com\/([^/?]+)/i)
+  return (match?.[1] ?? igHandle).replace(/^@/, '').replace(/\/$/, '').trim()
+}
+
+function IgHandleCell({ igHandle }: { igHandle: string | null }) {
+  const raw = igHandle?.trim()
+  if (!raw) return '—'
+
+  const username = instagramUsername(raw)
+  if (!username) return '—'
+
+  return (
+    <a
+      className="neo-agenda__ig-link"
+      href={`https://www.instagram.com/${encodeURIComponent(username)}/`}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`Abrir @${username} en Instagram`}
+    >
+      @{username}
+    </a>
+  )
+}
+
 function SetterSelect({
   leadId,
   setter,
@@ -112,7 +137,7 @@ export function PendingAgendaTable({
             {row.client_name || 'Sin nombre'}
           </div>
           <div className="neo-agenda__ig" title={row.ig_handle || undefined}>
-            {row.ig_handle?.trim() ? `@${row.ig_handle.replace(/^@/, '')}` : '—'}
+            <IgHandleCell igHandle={row.ig_handle} />
           </div>
           <div className="neo-agenda__call">{formatCallLabel(row.scheduled_at)}</div>
           <SetterSelect
