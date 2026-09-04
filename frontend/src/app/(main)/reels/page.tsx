@@ -6,6 +6,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import { useToast } from '@/shared/components/toast'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
+import { useCompanyTimezone } from '@/shared/components/app-providers'
+import { monthKeyInCompanyTz } from '@/shared/lib/company-timezone'
+import { formatCash } from '@/shared/lib/format-utils'
 
 type Reel = {
   id: string
@@ -73,6 +76,7 @@ type SyncStatus = {
 export default function ReelsPage() {
   const { toast } = useToast()
   const { ready, userId } = useAuthUser()
+  const { timezone } = useCompanyTimezone()
   const [reels, setReels] = useState<Reel[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
@@ -149,24 +153,22 @@ export default function ReelsPage() {
   }
 
   const monthChoices = useMemo(() => {
-    const merged = [...new Set([...availableMonths, ...recentMonthOptions(36)])]
+    const merged = [...new Set([...availableMonths, ...recentMonthOptions(36, timezone)])]
     merged.sort((a, b) => b.localeCompare(a))
     return merged
-  }, [availableMonths])
+  }, [availableMonths, timezone])
 
   const filterSubtitle = useMemo(() => {
     if (monthMode === 'all') return 'Todos los meses'
     if (monthMode === 'current') {
-      const n = new Date()
-      const ym = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`
-      return formatMonthLabel(ym)
+      return formatMonthLabel(monthKeyInCompanyTz(timezone))
     }
     if (monthMode === 'comparison' && comparisonMonths) {
       const [a, b] = comparisonMonths
       return `${formatMonthLabel(a)} vs ${formatMonthLabel(b)}`
     }
     return 'Comparación'
-  }, [monthMode, comparisonMonths])
+  }, [monthMode, comparisonMonths, timezone])
 
   const parseJson = async <T,>(res: Response): Promise<T> => {
     const text = await res.text()
@@ -190,8 +192,7 @@ export default function ReelsPage() {
     try {
       let monthQuery = ''
       if (monthMode === 'current') {
-        const n = new Date()
-        const ym = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`
+        const ym = monthKeyInCompanyTz(timezone)
         monthQuery = `&month=${encodeURIComponent(ym)}`
       } else if (monthMode === 'comparison' && comparisonMonths && comparisonMonths.length === 2) {
         const sorted = [...comparisonMonths].sort((a, b) => a.localeCompare(b))
@@ -213,7 +214,7 @@ export default function ReelsPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, monthMode, comparisonMonths, ready, userId, toast])
+  }, [page, monthMode, comparisonMonths, ready, userId, toast, timezone])
 
   const fetchMetrics = useCallback(async () => {
     if (!ready) return
@@ -245,8 +246,7 @@ export default function ReelsPage() {
 
       let q = ''
       if (monthMode === 'current') {
-        const n = new Date()
-        const ym = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`
+        const ym = monthKeyInCompanyTz(timezone)
         q = `?month=${encodeURIComponent(ym)}`
       }
       const res = await apiFetch(`/reels/metrics${q}`, {
@@ -257,7 +257,7 @@ export default function ReelsPage() {
     } catch (e) {
       toast(`Error al cargar métricas de reels: ${(e as Error).message}`)
     }
-  }, [monthMode, comparisonMonths, ready, userId, toast])
+  }, [monthMode, comparisonMonths, ready, userId, toast, timezone])
 
   const fetchSyncStatus = useCallback(async () => {
     if (!ready) return
@@ -1172,7 +1172,7 @@ function ReelCard({
           <div className="flex items-center justify-between">
             <div>
               <div className="text-[14px] font-semibold">{title}</div>
-              <div className="text-[11px] text-[var(--text3)] mt-0.5">{formatDateDMY(reel.published_at)}</div>
+              <div className="text-[11px] text-[var(--text3)] mt-0.5">{formatDateDMY(reel.published_at, timezone)}</div>
             </div>
             <div className="flex items-center gap-2">
               {reel.url && (
@@ -1420,11 +1420,12 @@ function ReelCard({
   )
 }
 
-function recentMonthOptions(count: number): string[] {
+function recentMonthOptions(count: number, timeZone: string): string[] {
   const out: string[] = []
-  const d = new Date()
+  const nowKey = monthKeyInCompanyTz(timeZone)
+  const [year, month] = nowKey.split('-').map(Number)
   for (let i = 0; i < count; i++) {
-    const x = new Date(d.getFullYear(), d.getMonth() - i, 1)
+    const x = new Date(year, month - 1 - i, 1)
     out.push(`${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`)
   }
   return out
@@ -1439,23 +1440,18 @@ function formatMonthLabel(ym: string): string {
   return d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
 }
 
-function formatCash(value: number): string {
-  const n = Number(value || 0)
-  return `$${Math.round(n).toLocaleString('es-AR')}`
-}
-
 function formatInt(value: number): string {
   const n = Number(value || 0)
   return Math.trunc(n).toLocaleString('es-AR')
 }
 
-/** Fecha de publicación en calendario Argentina (alineado con Instagram AR). */
-function formatDateDMY(value: string | null | undefined): string {
+/** Fecha de publicación en calendario de la instancia. */
+function formatDateDMY(value: string | null | undefined, timeZone: string): string {
   if (!value) return 'Sin fecha'
   const d = new Date(value)
   if (Number.isNaN(d.getTime())) return 'Sin fecha'
   return new Intl.DateTimeFormat('es-AR', {
-    timeZone: 'America/Argentina/Buenos_Aires',
+    timeZone,
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

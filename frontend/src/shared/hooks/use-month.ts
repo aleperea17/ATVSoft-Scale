@@ -1,11 +1,7 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-
-function getCurrentMonth(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
+import { useState, useCallback, useEffect } from 'react'
+import { monthKeyInCompanyTz } from '@/shared/lib/company-timezone'
 
 function getMonthLabel(month: string): string {
   const [year, m] = month.split('-').map(Number)
@@ -13,20 +9,26 @@ function getMonthLabel(month: string): string {
   return date.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
 }
 
-function getMonthOptions(): { value: string; label: string }[] {
+function getMonthOptions(timeZone: string): { value: string; label: string }[] {
   const options: { value: string; label: string }[] = []
-  const now = new Date()
+  const nowKey = monthKeyInCompanyTz(timeZone)
+  const [year, month] = nowKey.split('-').map(Number)
   for (let i = 0; i < 12; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const d = new Date(year, month - 1 - i, 1)
     const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     options.push({ value, label: getMonthLabel(value) })
   }
   return options
 }
 
-export function useMonth() {
-  const [month, setMonth] = useState(getCurrentMonth)
-  const options = getMonthOptions()
+export function useMonth(timeZone: string) {
+  const [month, setMonth] = useState(() => monthKeyInCompanyTz(timeZone))
+
+  useEffect(() => {
+    setMonth(monthKeyInCompanyTz(timeZone))
+  }, [timeZone])
+
+  const options = getMonthOptions(timeZone)
   const label = getMonthLabel(month)
 
   const prev = useCallback(() => {

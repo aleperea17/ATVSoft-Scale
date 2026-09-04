@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
 import { useToast } from '@/shared/components/toast'
 import { formatCash } from '@/shared/lib/format-utils'
+import { todayIsoInCompanyTz } from '@/shared/lib/company-timezone'
+import { useCompanyTimezone } from '@/shared/components/app-providers'
 import { apiFetch } from '@/lib/api'
 
 type TeamMemberOption = { id: number; nombre: string }
@@ -85,6 +87,7 @@ function errMessage(data: unknown): string {
 
 export function DailyReportSection({ role }: Props) {
   const { ready, userId } = useAuthUser()
+  const { timezone } = useCompanyTimezone()
   const { toast } = useToast()
   const [members, setMembers] = useState<TeamMemberOption[]>([])
   const [loading, setLoading] = useState(true)
@@ -103,7 +106,7 @@ export function DailyReportSection({ role }: Props) {
     ingreso: 0,
   })
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayIsoInCompanyTz(timezone)
 
   const [form, setForm] = useState<DailyReport>({
     date: today,
@@ -157,6 +160,11 @@ export function DailyReportSection({ role }: Props) {
   useEffect(() => {
     void fetchMembers()
   }, [fetchMembers])
+
+  useEffect(() => {
+    const next = todayIsoInCompanyTz(timezone)
+    setForm((f) => (f.date === next ? f : { ...f, date: next }))
+  }, [timezone])
 
   const fetchCloserPreview = useCallback(async () => {
     if (role !== 'closer' || !userId || form.memberId === '') return
@@ -390,7 +398,7 @@ export function DailyReportSection({ role }: Props) {
         <div className="glass-card glass-card--performant p-5">
           <div className="mb-2 text-[13px] font-semibold">Reporte diario — Closer (automático)</div>
           <p className="mb-4 text-[12px] leading-relaxed text-[var(--text3)]">
-            Se genera solo a las <strong className="text-[var(--text2)]">23:00 (Argentina)</strong> desde el panel
+            Se genera solo a las <strong className="text-[var(--text2)]">23:00 (zona de la empresa)</strong> desde el panel
             diario. Podés forzarlo antes con el botón de abajo. Completá status, calificación, pago y closer en cada
             llamada.
           </p>
@@ -457,7 +465,7 @@ export function DailyReportSection({ role }: Props) {
                     <span className="font-semibold text-[var(--green)]">
                       {closerPreview.cierres > 0
                         ? formatCash(closerPreview.ingreso / closerPreview.cierres)
-                        : '$0'}
+                        : formatCash(0)}
                     </span>
                   </div>
                 </div>

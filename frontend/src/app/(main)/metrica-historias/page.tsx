@@ -5,9 +5,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import { useToast } from '@/shared/components/toast'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
+import { useCompanyTimezone } from '@/shared/components/app-providers'
+import { monthKeyInCompanyTz } from '@/shared/lib/company-timezone'
 import { contentImageSrc } from '@/shared/lib/content-image-url'
-
-const AR_TZ = 'America/Argentina/Buenos_Aires'
 
 type SequenceSummary = {
   sequence_id: string
@@ -26,23 +26,15 @@ type SequencesSummaryResponse = {
   total_chats?: number
 }
 
-function currentMonthYm(): string {
-  const now = new Date()
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: AR_TZ,
-    year: 'numeric',
-    month: '2-digit',
-  }).formatToParts(now)
-  const y = parts.find((p) => p.type === 'year')?.value ?? '2026'
-  const m = parts.find((p) => p.type === 'month')?.value ?? '01'
-  return `${y}-${m}`
+function currentMonthYm(timeZone: string): string {
+  return monthKeyInCompanyTz(timeZone)
 }
 
-function formatMonthLabel(ym: string): string {
+function formatMonthLabel(ym: string, timeZone: string): string {
   const [y, m] = ym.split('-')
   if (!y || !m) return ym
   const d = new Date(Number(y), Number(m) - 1, 1)
-  return d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric', timeZone: AR_TZ })
+  return d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric', timeZone })
 }
 
 function formatSequenceDate(isoDate: string): string {
@@ -115,12 +107,17 @@ function SequenceChatCard({ sequence }: { sequence: SequenceSummary }) {
 export default function MetricasHistoriasPage() {
   const { toast } = useToast()
   const { ready } = useAuthUser()
+  const { timezone } = useCompanyTimezone()
   const [loading, setLoading] = useState(true)
-  const [month, setMonth] = useState(currentMonthYm)
+  const [month, setMonth] = useState(() => currentMonthYm(timezone))
   const [sequences, setSequences] = useState<SequenceSummary[]>([])
   const [totalChats, setTotalChats] = useState(0)
 
-  const monthLabel = useMemo(() => formatMonthLabel(month), [month])
+  const monthLabel = useMemo(() => formatMonthLabel(month, timezone), [month, timezone])
+
+  useEffect(() => {
+    setMonth(currentMonthYm(timezone))
+  }, [timezone])
 
   const fetchSummary = useCallback(async () => {
     if (!ready) return

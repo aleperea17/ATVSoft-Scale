@@ -11,11 +11,11 @@ from starlette.responses import Response
 
 from src.models import CloserReport, SeguimientoReport, SetterReport, TeamMember
 from src.services.closer_report_auto_service import (
-    AR_TZ,
     generate_closer_report_for_member,
     generate_daily_reports_for_user,
     preview_closer_report,
 )
+from src.services.company_config_service import company_today
 from src.services.discord_service import DiscordServices
 from src.team_reports_pdf import build_team_reports_pdf, fecha_iso_a_dd_mm_yyyy
 
@@ -689,12 +689,12 @@ def generate_closer_report(
 
 @router.post("/closer-reports/generate-day", response_model=CloserReportGenerateDayOut)
 def generate_closer_reports_day(
-    fecha: date | None = Query(None, description="YYYY-MM-DD; default hoy Argentina"),
+    fecha: date | None = Query(None, description="YYYY-MM-DD; default hoy (zona de la empresa)"),
     send_discord: bool = Query(True, description="Enviar a Discord al generar"),
     user_id: str = Depends(require_user_id),
 ) -> CloserReportGenerateDayOut:
     uid = _parse_uid(user_id)
-    target = fecha or datetime.now(AR_TZ).date()
+    target = fecha or company_today()
     count = generate_daily_reports_for_user(uid, target, send_discord=send_discord)
     if count == 0:
         raise HTTPException(

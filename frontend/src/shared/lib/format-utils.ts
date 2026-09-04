@@ -16,14 +16,14 @@ export function formatIsoDateDdMmYyyy(iso: string): string {
 }
 
 export function formatCash(n: number): string {
-  return '$' + Math.round(n).toLocaleString('es-AR')
+  return '€' + Math.round(n).toLocaleString('es-AR')
 }
 
-/** Eje compacto de gráficos ($1k, $500, …). */
+/** Eje compacto de gráficos (€1k, €500, …). */
 export function formatCashAxisShort(v: string | number): string {
   const n = Number(v)
   if (!Number.isFinite(n)) return formatCash(0)
-  if (Math.abs(n) >= 1000) return `$${Math.round(n / 1000)}k`
+  if (Math.abs(n) >= 1000) return `€${Math.round(n / 1000)}k`
   return formatCash(n)
 }
 

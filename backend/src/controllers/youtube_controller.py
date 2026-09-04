@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from typing import Annotated, Any
-from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -14,10 +13,9 @@ from pony.orm import ObjectNotFound, db_session
 from src.db import db
 from src.schemas import YoutubeVideoPatchRequest
 from src.models import ApiConnection, Lead, YoutubeContent
+from src.services.company_config_service import datetime_month_tuple
 
 router = APIRouter(prefix="/api/youtube", tags=["youtube"], redirect_slashes=False)
-
-_AR = ZoneInfo("America/Argentina/Buenos_Aires")
 _SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
 _VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
 _DURATION_RE = re.compile(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?")
@@ -74,14 +72,7 @@ def _published_naive_utc(iso: str | None) -> datetime | None:
 
 
 def _video_month_ar(published_at: datetime | None) -> tuple[int, int] | None:
-    if published_at is None:
-        return None
-    dt = published_at
-    if dt.tzinfo is not None:
-        dt = dt.replace(tzinfo=None)
-    d_utc = dt.replace(tzinfo=timezone.utc)
-    d_ar = d_utc.astimezone(_AR)
-    return (d_ar.year, d_ar.month)
+    return datetime_month_tuple(published_at)
 
 
 def _parse_month_query(month: str) -> tuple[int, int]:

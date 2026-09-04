@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { memo, useCallback, useEffect, useState } from 'react'
 import { apiFetch, backendAuthHeaders } from '@/lib/api'
 import { MonthSelector } from '@/shared/components/month-selector'
+import { useCompanyTimezone } from '@/shared/components/app-providers'
 import { useMonth } from '@/shared/hooks/use-month'
 import type { ConnectionPlatform } from './connection-platforms'
 import { ClaudeSaldoHint } from './claude-saldo-hint'
@@ -86,18 +87,19 @@ function ConnectionCardInner({
     next_run_at: string | null
     enabled: boolean
   } | null>(null)
+  const { timezone } = useCompanyTimezone()
   const {
     month: calendlySyncMonth,
     setMonth: setCalendlySyncMonth,
     options: calendlySyncMonthOptions,
     label: calendlySyncMonthLabel,
-  } = useMonth()
+  } = useMonth(timezone)
   const {
     month: ghlSyncMonth,
     setMonth: setGhlSyncMonth,
     options: ghlSyncMonthOptions,
     label: ghlSyncMonthLabel,
-  } = useMonth()
+  } = useMonth(timezone)
 
   const isConnected =
     !platform.infoOnly && connection && Object.values(connection.credentials).some((v) => v?.trim())

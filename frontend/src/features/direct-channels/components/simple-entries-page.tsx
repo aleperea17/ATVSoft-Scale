@@ -7,6 +7,7 @@ import { Modal } from '@/shared/components/modal'
 import { useToast } from '@/shared/components/toast'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
 import { formatCash } from '@/shared/lib/format-utils'
+import { todayIsoInCompanyTz } from '@/shared/lib/company-timezone'
 
 type FieldDef = { key: string; label: string; type?: string }
 
@@ -166,7 +167,7 @@ function SimpleEntryForm({
       fields.forEach((fd) => { f[fd.key] = String(initialData[fd.key] ?? '') })
       setForm(f)
     } else {
-      setForm({ date: new Date().toISOString().split('T')[0] })
+      setForm({ date: todayIsoInCompanyTz() })
     }
   }, [initialData, fields])
 

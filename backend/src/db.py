@@ -1362,6 +1362,31 @@ def _migrate_postgres_lead_formulario() -> None:
         conn.close()
 
 
+def _migrate_postgres_drop_company_config() -> None:
+    """Scale opera en Europe/Madrid fijo: ya no hay tabla de config de TZ."""
+    if (config("DB_PROVIDER", default="") or "").strip().lower() != "postgres":
+        return
+    try:
+        import psycopg2
+    except ImportError:
+        return
+    try:
+        conn = psycopg2.connect(
+            user=config("DB_USER"),
+            password=config("DB_PASS"),
+            host=config("DB_HOST"),
+            dbname=config("DB_NAME"),
+        )
+    except Exception:
+        return
+    try:
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute("DROP TABLE IF EXISTS company_config")
+    finally:
+        conn.close()
+
+
 def init_db() -> None:
     import src.models  # noqa: F401 — registrar entidades Pony antes del mapping
 
@@ -1389,6 +1414,7 @@ def init_db() -> None:
     _migrate_postgres_lead_calificacion_llamada()
     _migrate_postgres_weekly_report_feedback_marketing()
     _migrate_postgres_lead_formulario()
+    _migrate_postgres_drop_company_config()
     db.generate_mapping(create_tables=True)
     _migrate_agendo_en_iso_to_call()
     _migrate_agendo_en_default_chat_when_agendado()

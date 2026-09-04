@@ -3,24 +3,15 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
-from zoneinfo import ZoneInfo
 
 from pony.orm import db_session
 
 from src.models import Lead
-
-AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
-
-
-def _naive_now_ar() -> datetime:
-    return datetime.now(AR_TZ).replace(tzinfo=None)
+from src.services.company_config_service import company_now, company_today
 
 
-def _today_bounds_ar() -> tuple[datetime, datetime, date]:
-    hoy = datetime.now(AR_TZ).date()
-    inicio = datetime.combine(hoy, time.min)
-    fin = datetime.combine(hoy, time.max)
-    return inicio, fin, hoy
+def _naive_now_company() -> datetime:
+    return company_now().replace(tzinfo=None)
 
 
 def _fmt_hora(call: datetime | None) -> str:
@@ -39,7 +30,7 @@ def _leads_with_call(user_id: int) -> list[Lead]:
 
 @db_session
 def list_llamadas_hoy(user_id: int) -> dict:
-    hoy = datetime.now(AR_TZ).date()
+    hoy = company_today()
     return list_llamadas_dia(user_id, hoy)
 
 
@@ -74,7 +65,7 @@ def _llamada_item(l: Lead) -> dict:
 
 @db_session
 def list_proximas_llamadas(user_id: int, ventana: int) -> dict:
-    ahora = _naive_now_ar()
+    ahora = _naive_now_company()
     limite = ahora + timedelta(minutes=ventana)
     rows = [
         l

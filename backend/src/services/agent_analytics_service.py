@@ -8,16 +8,15 @@ import unicodedata
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from pony.orm import db_session
 
 from src.models import CloserReport, Lead, OfferedProgram, SeguimientoReport, SetterReport, TeamMember
+from src.services.company_config_service import company_month_key, datetime_month_tuple
 from src.services.programs_services import build_program_norm_price_map, program_price_usd_for_prog_raw
 from src.services.reels_services import ReelsServices
 from src.services.stories_service import StoriesService
 
-AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 COMMISSION_PCT = 5.0
 
 
@@ -45,7 +44,7 @@ def _parse_month(month: str) -> tuple[int, int]:
 
 
 def current_month_ar() -> str:
-    return datetime.now(AR_TZ).strftime("%Y-%m")
+    return company_month_key()
 
 
 def month_range(month: str) -> tuple[date, date]:
@@ -60,14 +59,7 @@ def _lead_effective_dt(row: Lead) -> datetime | None:
 
 
 def _lead_month_ar(row: Lead) -> tuple[int, int] | None:
-    dt = _lead_effective_dt(row)
-    if dt is None:
-        return None
-    if dt.tzinfo is not None:
-        dt = dt.replace(tzinfo=None)
-    d_utc = dt.replace(tzinfo=timezone.utc)
-    d_ar = d_utc.astimezone(AR_TZ)
-    return d_ar.year, d_ar.month
+    return datetime_month_tuple(_lead_effective_dt(row))
 
 
 def _week_index(day_of_month: int) -> int:

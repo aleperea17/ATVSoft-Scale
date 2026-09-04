@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from pony.orm import db_session, flush
 
 from src.models import CloserReport, Lead, TeamMember
+from src.services.company_config_service import company_today
 from src.services.discord_service import DiscordServices
 
-AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 discord_service = DiscordServices()
 
 
@@ -227,7 +226,7 @@ def generate_daily_reports_for_user(
     *,
     send_discord: bool = True,
 ) -> int:
-    target_date = fecha or datetime.now(AR_TZ).date()
+    target_date = fecha or company_today()
     generated = 0
     for closer_name in closer_names_with_calls_on_date(user_id, target_date):
         member = find_closer_member(user_id, closer_name)

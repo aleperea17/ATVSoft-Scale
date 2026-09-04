@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useMonthContext } from '@/shared/components/app-providers'
+import { useCompanyTimezone, useMonthContext } from '@/shared/components/app-providers'
 import { MonthSelector } from '@/shared/components/month-selector'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
 import { formatCash } from '@/shared/lib/format-utils'
+import { calendarPartsInTimeZone } from '@/shared/lib/company-timezone'
 import { apiFetch } from '@/lib/api'
 import { Line, Doughnut, Bar } from '@/shared/components/charts'
 import { calcFunnel, type LeadRow } from '@/features/leads/services/leads-analytics'
@@ -346,35 +347,26 @@ function classifyLeadChatSource(l: LeadRow): 'Historias' | 'Reels' | 'Perfil' | 
   return 'Otros'
 }
 
-/** Calendario (año, mes, día) en una zona horaria IANA (uso: “hoy” = Argentina, alineado al backend). */
-function calendarPartsInTimeZone(date: Date, timeZone: string): { year: number; month: number; day: number } {
-  const dtf = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: 'numeric', day: 'numeric' })
-  const parts = dtf.formatToParts(date)
-  const n = (t: string) => Number(parts.find(p => p.type === t)?.value ?? 0)
-  return { year: n('year'), month: n('month'), day: n('day') }
-}
-
-const AR_TZ = 'America/Argentina/Buenos_Aires'
-
-function todayArgentinaParts(): { year: number; month: number; day: number } {
-  return calendarPartsInTimeZone(new Date(), AR_TZ)
-}
-
-/** YYYY-MM-DD en calendario Argentina (ISO con hora → convierte; evita cortar UTC y desfasar un día). */
-function publishedDateKey(publishedAt: string): string {
+/** YYYY-MM-DD en calendario de la instancia (ISO con hora → convierte; evita cortar UTC y desfasar un día). */
+function publishedDateKey(publishedAt: string, timeZone: string): string {
   const s = String(publishedAt || '').trim()
   if (!s) return ''
   const ms = Date.parse(s)
   if (!Number.isNaN(ms)) {
-    const p = calendarPartsInTimeZone(new Date(ms), AR_TZ)
+    const p = calendarPartsInTimeZone(new Date(ms), timeZone)
     return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`
   }
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
   return m ? `${m[1]}-${m[2]}-${m[3]}` : ''
 }
 
-function contentInPublishedRange(c: { published_at: string }, start: string, end: string): boolean {
-  const d = publishedDateKey(c.published_at)
+function contentInPublishedRange(
+  c: { published_at: string },
+  start: string,
+  end: string,
+  timeZone: string,
+): boolean {
+  const d = publishedDateKey(c.published_at, timeZone)
   if (!d) return false
   return d >= start && d <= end
 }
@@ -558,6 +550,7 @@ function emptyDashForMonth(month: string): DashData {
 
 export default function DashboardPage() {
   const { month, options, setMonth } = useMonthContext()
+  const { timezone } = useCompanyTimezone()
   const { ready, userId } = useAuthUser()
   const [data, setData] = useState<DashData | null>(null)
   const [bioMetrics, setBioMetrics] = useState<BioMetrics | null>(null)
@@ -701,8 +694,8 @@ export default function DashboardPage() {
     const rawPrevDailyCash = [...prevDailyCash]
     for (let i = 1; i < prevDailyCash.length; i++) prevDailyCash[i] += prevDailyCash[i - 1]
 
-    const arNow = todayArgentinaParts()
-    const prevCashAtDay = prevDailyCash[Math.min(arNow.day - 1, prevDailyCash.length - 1)] || 0
+    const companyNow = calendarPartsInTimeZone(new Date(), timezone)
+    const prevCashAtDay = prevDailyCash[Math.min(companyNow.day - 1, prevDailyCash.length - 1)] || 0
 
     // Calls report — fecha de llamada agendada (call_at legacy o scheduled_at / columna call en BD)
     const calls = currLeads
@@ -765,7 +758,7 @@ export default function DashboardPage() {
         leads: currLeads.length,
       },
     })
-  }, [month, ready, userId, apiBase])
+  }, [month, ready, userId, apiBase, timezone])
 
   useEffect(() => { fetchData() }, [fetchData])
   useEffect(() => {
@@ -820,9 +813,9 @@ export default function DashboardPage() {
   const [y, m] = month.split('-').map(Number)
   const daysInMonth = new Date(y, m, 0).getDate()
 
-  const arToday = todayArgentinaParts()
-  const isMonthCurrent = arToday.year === y && arToday.month === m
-  const dayNow = isMonthCurrent ? arToday.day : daysInMonth
+  const companyToday = calendarPartsInTimeZone(new Date(), timezone)
+  const isMonthCurrent = companyToday.year === y && companyToday.month === m
+  const dayNow = isMonthCurrent ? companyToday.day : daysInMonth
 
   // Chart data
   const sparkDays = Array.from({ length: daysInMonth }, (_, i) => i + 1)
@@ -871,7 +864,7 @@ export default function DashboardPage() {
     if (!wg) return 0
     const startStr = `${y}-${padYm(m)}-${padYm(wg.startDay)}`
     const endStr = `${y}-${padYm(m)}-${padYm(wg.endDay)}`
-    return dashData.rawContent.filter(c => contentInPublishedRange(c, startStr, endStr)).length
+    return dashData.rawContent.filter(c => contentInPublishedRange(c, startStr, endStr, timezone)).length
   }
 
   const setterSumInWeekIdx = (wi: number) => {
@@ -988,7 +981,7 @@ export default function DashboardPage() {
 
   // Filter content by published_at date
   const viewContent = viewRange
-    ? dashData.rawContent.filter(c => contentInPublishedRange(c, viewRange.start, viewRange.end))
+    ? dashData.rawContent.filter(c => contentInPublishedRange(c, viewRange.start, viewRange.end, timezone))
     : dashData.rawContent
   const viewBio = viewRange ? [] : dashData.rawBio // bio has no daily dates
 

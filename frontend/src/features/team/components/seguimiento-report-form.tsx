@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
 import { useToast } from '@/shared/components/toast'
 import { apiFetch } from '@/lib/api'
+import { todayIsoInCompanyTz } from '@/shared/lib/company-timezone'
+import { useCompanyTimezone } from '@/shared/components/app-providers'
 
 type Miembro = { id: number; nombre: string; rol: string }
 
@@ -28,12 +30,13 @@ function rolLabel(rol: string): string {
 
 export function SeguimientoReportSection() {
   const { ready, userId } = useAuthUser()
+  const { timezone } = useCompanyTimezone()
   const { toast } = useToast()
   const [members, setMembers] = useState<Miembro[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayIsoInCompanyTz(timezone)
   const [form, setForm] = useState({
     date: today,
     memberId: '' as number | '',
@@ -75,6 +78,11 @@ export function SeguimientoReportSection() {
   useEffect(() => {
     void fetchMembers()
   }, [fetchMembers])
+
+  useEffect(() => {
+    const next = todayIsoInCompanyTz(timezone)
+    setForm((f) => (f.date === next ? f : { ...f, date: next }))
+  }, [timezone])
 
   useEffect(() => {
     const onChange = () => {

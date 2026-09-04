@@ -1,7 +1,6 @@
 import re
 from datetime import date, datetime, time, timezone
 from typing import Annotated
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from pony.orm import ObjectNotFound, db_session
@@ -20,7 +19,8 @@ from src.schemas import (
     LlamadasHoyOut,
     ManualCallCreateRequest,
 )
-from src.services.agent_closer_service import AR_TZ, list_llamadas_dia, list_llamadas_hoy
+from src.services.agent_closer_service import list_llamadas_dia, list_llamadas_hoy
+from src.services.company_config_service import company_now, company_today, datetime_month_tuple
 from src.services.programs_services import (
     build_program_norm_price_map,
     program_price_usd_for_prog_raw,
@@ -33,8 +33,6 @@ from src.services.call_report_service import (
 )
 
 router = APIRouter(prefix="/api/leads", tags=["leads"], redirect_slashes=False)
-
-_AR = ZoneInfo("America/Argentina/Buenos_Aires")
 
 _STORY_AGENDA_PREFIX = "story:"
 _YOUTUBE_AGENDA_PREFIX = "youtube:"
@@ -127,15 +125,8 @@ def _lead_effective_dt(row: LeadEntity) -> datetime | None:
 
 
 def _lead_month_ar(row: LeadEntity) -> tuple[int, int] | None:
-    """(año, mes) en Argentina; mismo criterio de calendario que métricas de reels."""
-    dt = _lead_effective_dt(row)
-    if dt is None:
-        return None
-    if dt.tzinfo is not None:
-        dt = dt.replace(tzinfo=None)
-    d_utc = dt.replace(tzinfo=timezone.utc)
-    d_ar = d_utc.astimezone(_AR)
-    return (d_ar.year, d_ar.month)
+    """(año, mes) en la zona de la empresa; mismo criterio de calendario que métricas de reels."""
+    return datetime_month_tuple(_lead_effective_dt(row))
 
 
 def _lead_month_string_ar(row: LeadEntity) -> str | None:
@@ -340,18 +331,18 @@ def list_leads(
 
 
 def _operative_month_for_create(month_param: str | None) -> tuple[int, int]:
-    """Mes operativo para anclar fecha_bot/agendo (AR si no se envía month)."""
+    """Mes operativo para anclar fecha_bot/agendo (zona de la empresa si no se envía month)."""
     if month_param and str(month_param).strip():
         mk = _parse_month_query(month_param)
         if mk is None:
             raise HTTPException(status_code=400, detail="month inválido (usar YYYY-MM).")
         return mk
-    now_ar = datetime.now(timezone.utc).astimezone(_AR)
-    return (now_ar.year, now_ar.month)
+    now_local = company_now()
+    return (now_local.year, now_local.month)
 
 
 def _anchor_datetime_for_operative_month(year: int, month: int) -> datetime:
-    """Mitad de mes en UTC naive: consistente con filtro GET /leads ?month= (mes AR)."""
+    """Mitad de mes en UTC naive: consistente con filtro GET /leads ?month=."""
     return datetime(year, month, 15, 15, 0, 0)
 
 
@@ -421,9 +412,9 @@ def create_manual_call(
     except ValueError as e:
         raise HTTPException(status_code=400, detail="user_id inválido") from e
 
-    target_date = body.fecha or datetime.now(AR_TZ).date()
+    target_date = body.fecha or company_today()
     call_at = _parse_call_hora_on_date(body.hora, target_date)
-    now_ar = datetime.now(AR_TZ).replace(tzinfo=None)
+    now_local = company_now().replace(tzinfo=None)
     anchor = datetime(target_date.year, target_date.month, 15, 15, 0, 0)
 
     with db_session:
@@ -437,7 +428,7 @@ def create_manual_call(
             estado="Pendiente",
             closer=(body.closer or "").strip(),
             fecha_bot=anchor,
-            agendo=now_ar,
+            agendo=now_local,
             agendo_en="Panel diario",
             call=call_at,
         )
@@ -478,7 +469,7 @@ def leads_sin_punto_agenda(
     user_id: Annotated[str, Depends(require_user_id)],
     month: str | None = Query(
         default=None,
-        description="YYYY-MM; default mes actual en Argentina.",
+        description="YYYY-MM; default mes actual (zona de la empresa).",
     ),
 ) -> LeadsSinPuntoAgendaOut:
     """Agendas del mes (con agendo) que aún no tienen punto de agenda asignado."""
@@ -492,8 +483,8 @@ def leads_sin_punto_agenda(
         if month_key is None:
             raise HTTPException(status_code=400, detail="Parámetro month inválido (usar YYYY-MM).")
     else:
-        now_ar = datetime.now(_AR)
-        month_key = (now_ar.year, now_ar.month)
+        now_local = company_now()
+        month_key = (now_local.year, now_local.month)
 
     y, mn = month_key
     month_s = f"{y}-{mn:02d}"
@@ -524,7 +515,7 @@ def leads_llamadas_hoy(
     user_id: Annotated[str, Depends(require_user_id)],
     fecha: date | None = Query(
         default=None,
-        description="YYYY-MM-DD; default hoy en Argentina.",
+        description="YYYY-MM-DD; default hoy (zona de la empresa).",
     ),
 ) -> LlamadasHoyOut:
     try:
@@ -541,7 +532,7 @@ def leads_metrics(
     user_id: Annotated[str, Depends(require_user_id)],
     month: str | None = Query(
         default=None,
-        description="YYYY-MM; mismo filtro que GET /leads (mes AR por fecha_bot / created_at)",
+        description="YYYY-MM; mismo filtro que GET /leads (zona de la empresa)",
     ),
 ) -> LeadsMetricsOut:
     """Métricas agregadas de todos los leads del mes (no filtro BIO)."""

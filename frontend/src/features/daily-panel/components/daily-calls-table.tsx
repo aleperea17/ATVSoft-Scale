@@ -310,7 +310,7 @@ function CurrencyCell({
       className={`neo-calls__payment ${paidClass} ${owedClass}`}
       title={isOwed ? 'Editar debe' : 'Editar pago'}
     >
-      {num > 0 ? formatCash(num) : isOwed ? '—' : '$0'}
+      {num > 0 ? formatCash(num) : isOwed ? '—' : formatCash(0)}
     </button>
   )
 }

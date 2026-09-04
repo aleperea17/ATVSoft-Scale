@@ -1,8 +1,5 @@
 import type { ChannelBreakdown } from '../types/dashboard'
-
-function fmt(n: number): string {
-  return '$' + Math.round(n).toLocaleString('es-AR')
-}
+import { formatCash } from '@/shared/lib/format-utils'
 
 type ChannelBreakdownProps = {
   channels: ChannelBreakdown[]
@@ -37,7 +34,7 @@ export function ChannelBreakdownCard({ channels }: ChannelBreakdownProps) {
                     {ch.chats} chats
                   </span>
                   <span className="font-mono-num text-[13px] font-medium text-[var(--green)]">
-                    {fmt(ch.cash)}
+                    {formatCash(ch.cash)}
                   </span>
                 </div>
               </div>

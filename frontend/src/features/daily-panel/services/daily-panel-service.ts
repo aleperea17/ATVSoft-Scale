@@ -1,4 +1,5 @@
 import { apiFetch } from '@/lib/api'
+import { todayIsoInCompanyTz } from '@/shared/lib/company-timezone'
 import { DEFAULT_DAILY_CLOSER } from '../constants'
 import type { DailyCall, DailyCallsResponse, ManualCallInput, PendingAgendaResponse } from '../types'
 
@@ -69,17 +70,6 @@ function normalizeTeamCloser(closer: string, teamClosers: string[]): string | nu
   return teamClosers.find((n) => n.trim().toLowerCase() === needle) ?? null
 }
 
-const AR_TZ = 'America/Argentina/Buenos_Aires'
-
-function todayIsoInArgentina(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: AR_TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
-}
-
 export async function getDailyCalls(
   teamClosers: string[],
   defaultCloser: string,
@@ -98,7 +88,7 @@ export async function getDailyCalls(
 
   const llamadas: DailyCall[] = []
   const patchCloser: { id: number; closer: string }[] = []
-  const shouldPatchCloser = !fecha || fecha === todayIsoInArgentina()
+  const shouldPatchCloser = !fecha || fecha === todayIsoInCompanyTz()
 
   for (const row of Array.isArray(raw.llamadas) ? raw.llamadas : []) {
     const closerRaw = (row.closer || '').trim()

@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Bar, Pie } from '@/shared/components/charts'
 import { apiFetch } from '@/lib/api'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
+import { useCompanyTimezone } from '@/shared/components/app-providers'
+import { calendarPartsInTimeZone } from '@/shared/lib/company-timezone'
 import { formatCash } from '@/shared/lib/format-utils'
 
 type ReelRow = {
@@ -31,10 +33,10 @@ type ReelMetricItem = {
   publishedAt: string | null
   keyword: string | null
   year: number | null
-  /** 1–12 en calendario Argentina (publicación) */
+  /** 1–12 en calendario de la instancia (publicación) */
   month: number | null
   day: number | null
-  /** Semana dentro del mes (1 = días 1–7, …) según fecha AR */
+  /** Semana dentro del mes (1 = días 1–7, …) según fecha de la instancia */
   weekOfMonth: number | null
   chats: number
   cash: number
@@ -47,8 +49,6 @@ type ReelMetricItem = {
   angulos: string | null
   cta: string | null
 }
-
-const AR_TZ = 'America/Argentina/Buenos_Aires'
 
 const MONTH_OPTIONS = [
   { value: 1, label: 'Enero' },
@@ -201,13 +201,11 @@ function ScrollablePieLegend({
   )
 }
 
-function calendarInArgentina(d: Date): { y: number; m: number; d: number } | null {
+function calendarInCompanyTz(d: Date, timeZone: string): { y: number; m: number; d: number } | null {
   if (Number.isNaN(d.getTime())) return null
-  const y = Number(new Intl.DateTimeFormat('en', { timeZone: AR_TZ, year: 'numeric' }).format(d))
-  const m = Number(new Intl.DateTimeFormat('en', { timeZone: AR_TZ, month: 'numeric' }).format(d))
-  const day = Number(new Intl.DateTimeFormat('en', { timeZone: AR_TZ, day: 'numeric' }).format(d))
-  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(day)) return null
-  return { y, m, d: day }
+  const p = calendarPartsInTimeZone(d, timeZone)
+  if (!Number.isFinite(p.year) || !Number.isFinite(p.month) || !Number.isFinite(p.day)) return null
+  return { y: p.year, m: p.month, d: p.day }
 }
 
 function daysInMonth(y: number, m: number): number {
@@ -224,6 +222,7 @@ function weekDayRangeLabel(y: number, m: number, week: number): string {
 
 export function ReelsMetricsPanel() {
   const { ready, userId } = useAuthUser()
+  const { timezone } = useCompanyTimezone()
   const [rows, setRows] = useState<ReelMetricItem[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedYear, setSelectedYear] = useState<string>('all')
@@ -258,7 +257,7 @@ export function ReelsMetricsPanel() {
           const likes = Number(r.metrics?.likes || 0)
           const shares = Number(r.metrics?.shares || 0)
           const cl = r.classification
-          const parts = r.published_at ? calendarInArgentina(new Date(r.published_at)) : null
+          const parts = r.published_at ? calendarInCompanyTz(new Date(r.published_at), timezone) : null
           const weekOfMonth =
             parts && parts.d > 0 ? Math.floor((parts.d - 1) / 7) + 1 : null
           return {
@@ -267,7 +266,7 @@ export function ReelsMetricsPanel() {
             url: r.url || null,
             publishedAt: r.published_at || null,
             keyword: r.keyword || null,
-            year: parts?.y ?? (r.published_at ? yearInArgentina(new Date(r.published_at)) : null),
+            year: parts?.y ?? (r.published_at ? yearInCompanyTz(new Date(r.published_at), timezone) : null),
             month: parts?.m ?? null,
             day: parts?.d ?? null,
             weekOfMonth,
@@ -295,7 +294,7 @@ export function ReelsMetricsPanel() {
     return () => {
       cancelled = true
     }
-  }, [ready, userId])
+  }, [ready, userId, timezone])
 
   const dateFiltersEnabled = selectedCtaScope === 'con_cta' || selectedCtaScope === 'sin_cta'
   const weekFilterEnabled = dateFiltersEnabled && selectedYear !== 'all' && selectedMonth !== 'all'
@@ -441,7 +440,7 @@ export function ReelsMetricsPanel() {
               setSelectedWeek('all')
             }}
             disabled={!dateFiltersEnabled}
-            title={dateFiltersEnabled ? 'Año de publicación (Argentina)' : dateFilterHint}
+            title={dateFiltersEnabled ? 'Año de publicación (zona empresa)' : dateFilterHint}
             className={filterSelectClass}
           >
             <option value="all">Todos</option>
@@ -817,7 +816,7 @@ export function ReelsMetricsPanel() {
               <div>
                 <div className="text-[15px] font-semibold">{selectedReel.title}</div>
                 <div className="mt-1 text-[11px] text-[var(--text3)]">
-                  {formatDateDMY(selectedReel.publishedAt)}
+                  {formatDateDMY(selectedReel.publishedAt, timezone)}
                 </div>
               </div>
               <button
@@ -946,22 +945,18 @@ function KeywordCard({ value }: { value: string | null }) {
   )
 }
 
-function yearInArgentina(d: Date): number | null {
+function yearInCompanyTz(d: Date, timeZone: string): number | null {
   if (Number.isNaN(d.getTime())) return null
-  const y = new Intl.DateTimeFormat('en', {
-    timeZone: AR_TZ,
-    year: 'numeric',
-  }).format(d)
-  const n = Number(y)
+  const n = calendarPartsInTimeZone(d, timeZone).year
   return Number.isFinite(n) ? n : null
 }
 
-function formatDateDMY(value: string | null | undefined): string {
+function formatDateDMY(value: string | null | undefined, timeZone: string): string {
   if (!value) return 'Sin fecha'
   const d = new Date(value)
   if (Number.isNaN(d.getTime())) return 'Sin fecha'
   return new Intl.DateTimeFormat('es-AR', {
-    timeZone: AR_TZ,
+    timeZone,
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

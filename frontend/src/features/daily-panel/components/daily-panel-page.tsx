@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
 import { useToast } from '@/shared/components/toast'
 import { formatIsoDateDdMmYyyy } from '@/shared/lib/format-utils'
+import { todayIsoInCompanyTz } from '@/shared/lib/company-timezone'
+import { useCompanyTimezone } from '@/shared/components/app-providers'
 import {
   createManualCall,
   generateCloserReportsForDay,
@@ -36,9 +38,7 @@ import { AgendaPointPickerModal } from '@/features/leads/components/agenda-point
 import '../daily-panel.css'
 import '../daily-panel-manual-call.css'
 
-const AR_TZ = 'America/Argentina/Buenos_Aires'
-
-function useArgentinaClock(active: boolean): string {
+function useCompanyClock(active: boolean, timeZone: string): string {
   const [clock, setClock] = useState('')
 
   useEffect(() => {
@@ -53,14 +53,14 @@ function useArgentinaClock(active: boolean): string {
           minute: '2-digit',
           second: '2-digit',
           hour12: false,
-          timeZone: AR_TZ,
+          timeZone,
         }).format(new Date()),
       )
     }
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [active])
+  }, [active, timeZone])
 
   return clock
 }
@@ -74,15 +74,6 @@ function monthLabelFromKey(monthKey: string): string {
   if (!y || !m) return monthKey
   const label = new Intl.DateTimeFormat('es-AR', { month: 'long' }).format(new Date(y, m - 1, 1))
   return `${label} ${y}`
-}
-
-function todayIsoInArgentina(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: AR_TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
 }
 
 function shiftIsoDate(iso: string, days: number): string {
@@ -109,8 +100,9 @@ export function DailyPanelPage({
 }) {
   const isAdmin = mode === 'admin' && Boolean(adminToken)
   const { ready, userId } = useAuthUser()
+  const { timezone } = useCompanyTimezone()
   const { toast } = useToast()
-  const [selectedDate, setSelectedDate] = useState(todayIsoInArgentina)
+  const [selectedDate, setSelectedDate] = useState(() => todayIsoInCompanyTz())
   const [calls, setCalls] = useState<DailyCall[]>([])
   const [pendingAgenda, setPendingAgenda] = useState<PendingAgendaLead[]>([])
   const [pendingAgendaMonth, setPendingAgendaMonth] = useState('')
@@ -127,7 +119,11 @@ export function DailyPanelPage({
   const [manualCloser, setManualCloser] = useState('')
   const [manualSaving, setManualSaving] = useState(false)
   const [generatingReport, setGeneratingReport] = useState(false)
-  const clock = useArgentinaClock(ready && Boolean(userId))
+  const clock = useCompanyClock(ready && Boolean(userId), timezone)
+
+  useEffect(() => {
+    setSelectedDate(todayIsoInCompanyTz(timezone))
+  }, [timezone])
 
   const fetchCalls = useCallback(
     async (silent = false) => {
@@ -430,7 +426,7 @@ export function DailyPanelPage({
     )
   }
 
-  const todayIso = todayIsoInArgentina()
+  const todayIso = todayIsoInCompanyTz(timezone)
   const isToday = selectedDate === todayIso
   const fechaLabel = formatIsoDateDdMmYyyy(selectedDate)
   const countLabel =
@@ -486,7 +482,7 @@ export function DailyPanelPage({
               </button>
             )}
             <span className="neo-panel__date-tz">
-              · Argentina
+              · zona empresa
               {isAdmin ? ' · modo admin' : ''}
             </span>
           </div>

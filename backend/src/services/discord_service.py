@@ -96,7 +96,7 @@ class DiscordServices:
                         f"Cierres: **{body.get('cierres', 0)}**\n"
                         f"Calificados: **{body.get('calificados', 0)}**\n"
                         f"Descalificados: **{body.get('descalificados', 0)}**\n"
-                        f"Ingreso: **${body.get('ingreso', 0)}**"
+                        f"Ingreso: **€{body.get('ingreso', 0)}**"
                     ),
                     "inline": False,
                 },

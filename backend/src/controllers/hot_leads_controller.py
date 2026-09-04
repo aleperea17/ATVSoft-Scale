@@ -1,6 +1,5 @@
 from datetime import date, datetime, timezone
 from typing import Annotated
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pony.orm import ObjectNotFound, db_session
@@ -12,10 +11,9 @@ from src.schemas import (
     HotLeadPatchRequest,
     HotLeadsListResponse,
 )
+from src.services.company_config_service import company_now, datetime_month_tuple
 
 router = APIRouter(prefix="/api/hot-leads", tags=["hot-leads"], redirect_slashes=False)
-
-_AR = ZoneInfo("America/Argentina/Buenos_Aires")
 
 
 def require_user_id(
@@ -51,14 +49,7 @@ def _hot_lead_effective_dt(row: HotLeadEntity) -> datetime | None:
 
 
 def _hot_lead_month_ar(row: HotLeadEntity) -> tuple[int, int] | None:
-    dt = _hot_lead_effective_dt(row)
-    if dt is None:
-        return None
-    if dt.tzinfo is not None:
-        dt = dt.replace(tzinfo=None)
-    d_utc = dt.replace(tzinfo=timezone.utc)
-    d_ar = d_utc.astimezone(_AR)
-    return (d_ar.year, d_ar.month)
+    return datetime_month_tuple(_hot_lead_effective_dt(row))
 
 
 def _hot_lead_month_string_ar(row: HotLeadEntity) -> str | None:
@@ -129,8 +120,8 @@ def _operative_month_for_create(month_param: str | None) -> tuple[int, int]:
         if mk is None:
             raise HTTPException(status_code=400, detail="month inválido (usar YYYY-MM).")
         return mk
-    now_ar = datetime.now(timezone.utc).astimezone(_AR)
-    return (now_ar.year, now_ar.month)
+    now_local = company_now()
+    return (now_local.year, now_local.month)
 
 
 @router.get("", response_model=HotLeadsListResponse)

@@ -7,6 +7,7 @@ import { Modal } from '@/shared/components/modal'
 import { useToast } from '@/shared/components/toast'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
 import { getMonthRange, formatCash } from '@/shared/lib/format-utils'
+import { todayIsoInCompanyTz } from '@/shared/lib/company-timezone'
 
 type ContentType = 'reel' | 'historia' | 'story' | 'video'
 
@@ -354,7 +355,7 @@ function ContentFormModal({ open, onClose, item, onSave, title, contentType }: C
         manychat_tag_name: item.manychat_tag_name || '',
       })
     } else {
-      setForm({ fecha: new Date().toISOString().split('T')[0] })
+      setForm({ fecha: todayIsoInCompanyTz() })
     }
     setShowTagPicker(false)
     setTagSearch('')

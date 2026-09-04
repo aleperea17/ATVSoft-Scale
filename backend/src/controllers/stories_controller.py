@@ -1,6 +1,5 @@
 from datetime import datetime
 from typing import Annotated, Any
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 import traceback
@@ -12,11 +11,11 @@ from src.schemas import (
     StorySequenceOut,
     StorySequencePatchRequest,
 )
+from src.services.company_config_service import company_month_key
 from src.services.stories_service import StoriesService
 
 router = APIRouter(prefix="/api/stories", tags=["stories"], redirect_slashes=False)
 service = StoriesService()
-AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 
 
 def get_current_user(
@@ -42,7 +41,7 @@ def get_sequences(
     try:
         if all_months:
             return service.get_all_sequences(user_id)
-        effective_month = month or datetime.now(AR_TZ).strftime("%Y-%m")
+        effective_month = month or company_month_key()
         return service.get_sequences(user_id, effective_month)
     except HTTPException as e:
         raise e
@@ -56,7 +55,7 @@ def get_sequences_summary(
     month: str | None = Query(default=None, description="Formato YYYY-MM"),
 ) -> StoriesSequencesSummaryResponse:
     try:
-        effective_month = month or datetime.now(AR_TZ).strftime("%Y-%m")
+        effective_month = month or company_month_key()
         data = service.get_sequences_summary(user_id, effective_month)
         return StoriesSequencesSummaryResponse(**data)
     except HTTPException as e:
@@ -154,7 +153,7 @@ def get_metrics(
     month: str | None = Query(default=None, description="Formato YYYY-MM"),
 ) -> StoriesMetricsOut:
     try:
-        effective_month = month or datetime.now(AR_TZ).strftime("%Y-%m")
+        effective_month = month or company_month_key()
         return service.get_metrics(user_id, effective_month)
     except HTTPException as e:
         raise e

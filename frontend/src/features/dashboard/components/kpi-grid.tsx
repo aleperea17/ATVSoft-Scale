@@ -1,10 +1,7 @@
 import type { DashboardData } from '../types/dashboard'
+import { formatCash } from '@/shared/lib/format-utils'
 import { KpiCard } from './kpi-card'
 import { ChannelBreakdownCard } from './channel-breakdown'
-
-function fmt(n: number): string {
-  return '$' + Math.round(n).toLocaleString('es-AR')
-}
 
 function trendCalc(current: number, previous: number): { value: string; direction: 'up' | 'down' | 'neutral' } {
   if (previous === 0 && current === 0) return { value: '—', direction: 'neutral' }
@@ -28,7 +25,7 @@ export function KpiGrid({ data }: KpiGridProps) {
       <div className="grid grid-cols-4 gap-4">
         <KpiCard
           label="Cash Total"
-          value={fmt(data.cashTotal)}
+          value={formatCash(data.cashTotal)}
           accent
           trend={trendCalc(data.cashTotal, data.prevMonth.cashTotal)}
         />
@@ -44,7 +41,7 @@ export function KpiGrid({ data }: KpiGridProps) {
         />
         <KpiCard
           label="Cash por chat"
-          value={fmt(data.cpc)}
+          value={formatCash(data.cpc)}
           trend={trendCalc(data.cpc, data.prevMonth.cpc)}
         />
       </div>

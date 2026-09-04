@@ -7,7 +7,6 @@ import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import certifi
 import httpx
@@ -17,10 +16,10 @@ from pony.orm import ObjectNotFound, db_session, flush
 from src.db import db
 from src.models import ApiConnection, Lead, StorySequence, StorySlide
 from src.schemas import StorySequenceIn
+from src.services.company_config_service import company_now, get_company_tz
 from src.services.sync_settings_service import auto_sync_enabled, get_stories_interval_minutes
 from src.story_sync_scheduler_ref import next_auto_sync_stories_run_time
 
-AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 _sync_lock = asyncio.Lock()
 
 
@@ -844,7 +843,7 @@ class StoriesService:
         slide.profile_visits = (
             metrics.get("profile_visits") if metrics.get("profile_visits") is not None else slide.profile_visits
         )
-        slide.synced_at = datetime.now(AR_TZ)
+        slide.synced_at = company_now()
 
     @db_session
     def _create_slide(
@@ -867,7 +866,7 @@ class StoriesService:
             replies=metrics.get("replies") if metrics.get("replies") is not None else None,
             navigation=metrics.get("navigation") if metrics.get("navigation") is not None else None,
             profile_visits=metrics.get("profile_visits") if metrics.get("profile_visits") is not None else None,
-            synced_at=datetime.now(AR_TZ),
+            synced_at=company_now(),
         )
 
     @db_session
@@ -883,13 +882,13 @@ class StoriesService:
         slide.profile_visits = (
             metrics.get("profile_visits") if metrics.get("profile_visits") is not None else slide.profile_visits
         )
-        slide.synced_at = datetime.now(AR_TZ)
+        slide.synced_at = company_now()
 
     @db_session
     def _touch_last_sync(self, user_id: str) -> None:
         conn = ApiConnection.get(user_id=int(user_id), platform="instagram")
         if conn is not None:
-            conn.last_sync_at = datetime.now(AR_TZ)
+            conn.last_sync_at = company_now()
 
     @db_session
     def get_sync_status(self, user_id: str) -> dict[str, str | bool | None]:
@@ -1033,7 +1032,7 @@ class StoriesService:
                 if metrics.get("profile_visits") is not None
                 else slide.profile_visits
             )
-            slide.synced_at = datetime.now(AR_TZ)
+            slide.synced_at = company_now()
             refreshed += 1
         return refreshed
 
@@ -1049,7 +1048,7 @@ class StoriesService:
                 stories_payload = _http_json(stories_url, headers=headers)
                 stories = stories_payload.get("data")
                 story_rows = stories if isinstance(stories, list) else []
-                tz = AR_TZ
+                tz = get_company_tz()
                 grouped: dict[date, list[dict[str, Any]]] = {}
 
                 for raw in story_rows:

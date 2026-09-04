@@ -2,7 +2,6 @@ import os
 import glob
 from contextlib import asynccontextmanager
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -38,8 +37,10 @@ from src.controllers.webhook_controller import router as webhook_router
 from src.db import db, init_db
 from src.models import ApiConnection
 from src.services.reels_services import ReelsServices
+from src.services.company_config_service import get_company_timezone_name, get_company_tz
 from src.services.sync_scheduler_service import (
     CALENDLY_JOB_ID,
+    CLOSER_DAILY_REPORT_JOB_ID,
     REELS_JOB_ID,
     REELS_NEW_SYNC_JOB_ID,
     STORIES_JOB_ID,
@@ -58,8 +59,6 @@ from src.services.sync_settings_service import (
 from src.services.stories_service import StoriesService
 from src.services.closer_report_auto_service import generate_daily_reports_all_users
 
-AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
-CLOSER_DAILY_REPORT_JOB_ID = "auto_closer_daily_reports"
 scheduler = AsyncIOScheduler()
 
 
@@ -174,12 +173,14 @@ async def lifespan(_: FastAPI):
     print(f"[media] Archivos encontrados: {len(archivos)}")
     print(f"[media] Directorio: {media_dir}")
     if auto_sync_enabled():
+        company_tz = get_company_tz()
+        tz_name = get_company_timezone_name()
         scheduler.add_job(
             auto_sync_stories,
             trigger=IntervalTrigger(minutes=DEFAULT_STORIES_INTERVAL_MINUTES),
             id=STORIES_JOB_ID,
             replace_existing=True,
-            next_run_time=datetime.now(AR_TZ),
+            next_run_time=datetime.now(company_tz),
         )
         scheduler.add_job(
             auto_refresh_reels_metrics,
@@ -195,13 +196,13 @@ async def lifespan(_: FastAPI):
         )
         scheduler.add_job(
             auto_generate_closer_daily_reports,
-            trigger=CronTrigger(hour=23, minute=0, timezone=AR_TZ),
+            trigger=CronTrigger(hour=23, minute=0, timezone=company_tz),
             id=CLOSER_DAILY_REPORT_JOB_ID,
             replace_existing=True,
         )
         scheduler.add_job(
             auto_sync_new_reels,
-            trigger=CronTrigger(hour=23, minute=59, timezone=AR_TZ),
+            trigger=CronTrigger(hour=23, minute=59, timezone=company_tz),
             id=REELS_NEW_SYNC_JOB_ID,
             replace_existing=True,
         )
@@ -219,8 +220,11 @@ async def lifespan(_: FastAPI):
             f"[scheduler] Auto-sync Calendly cada {get_calendly_interval_minutes()} min "
             f"(check liviano -> sync solo si hay novedades)"
         )
-        print("[scheduler] Reporte closer ventas automático diario a las 23:00 (Argentina)")
-        print("[scheduler] Reels automático diario a las 23:59 (Argentina): buscar nuevos + actualizar métricas")
+        print(f"[scheduler] Reporte closer ventas automático diario a las 23:00 ({tz_name})")
+        print(
+            f"[scheduler] Reels automático diario a las 23:59 ({tz_name}): "
+            "buscar nuevos + actualizar métricas"
+        )
     else:
         print(
             "[scheduler] Auto-sync DESACTIVADO (DISABLE_AUTO_SYNC=true). "

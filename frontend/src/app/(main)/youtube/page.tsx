@@ -5,6 +5,8 @@ import { useToast } from '@/shared/components/toast'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
 import { backendAuthHeaders } from '@/lib/api'
 import { formatK, formatCash, formatIntegerEsAr } from '@/shared/lib/format-utils'
+import { monthKeyInCompanyTz } from '@/shared/lib/company-timezone'
+import { useCompanyTimezone } from '@/shared/components/app-providers'
 
 type PerfSnapshot = { date: string; views: number; likes: number; comments: number }
 type VideoMetrics = {
@@ -76,14 +78,14 @@ function prevMonth(ym: string): string | null {
 
 const UNDO_DURATION = 6000
 
-function calendarYm(): string {
-  const n = new Date()
-  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`
+function calendarYm(timeZone: string): string {
+  return monthKeyInCompanyTz(timeZone)
 }
 
 export default function YouTubePage() {
   const { toast } = useToast()
   const { ready, userId } = useAuthUser()
+  const { timezone } = useCompanyTimezone()
   const apiBase =
     (process.env.NEXT_PUBLIC_BACKEND_URL || '').trim().replace(/\/$/, '') || '/api-backend'
   const [monthMode, setMonthMode] = useState<'all' | 'current' | 'comparison'>('all')
@@ -107,20 +109,20 @@ export default function YouTubePage() {
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const undoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const monthChoices = useMemo(() => {
-    const merged = [...new Set([...availableMonths, ...recentMonthOptions(36)])]
+    const merged = [...new Set([...availableMonths, ...recentMonthOptions(36, timezone)])]
     merged.sort((a, b) => b.localeCompare(a))
     return merged
-  }, [availableMonths])
+  }, [availableMonths, timezone])
 
   const filterSubtitle = useMemo(() => {
     if (monthMode === 'all') return 'Todos los meses'
-    if (monthMode === 'current') return formatMonthLabel(calendarYm())
+    if (monthMode === 'current') return formatMonthLabel(calendarYm(timezone))
     if (monthMode === 'comparison' && comparisonMonths) {
       const [a, b] = comparisonMonths
       return `${formatMonthLabel(a)} vs ${formatMonthLabel(b)}`
     }
     return 'Comparación'
-  }, [monthMode, comparisonMonths])
+  }, [monthMode, comparisonMonths, timezone])
 
   const showUndo = (label: string, fn: () => Promise<void>) => {
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current)
@@ -146,7 +148,7 @@ export default function YouTubePage() {
         let leadsUrl = `${apiBase}/api/leads`
 
         if (monthMode === 'current') {
-          const ym = calendarYm()
+          const ym = calendarYm(timezone)
           vq.set('month', ym)
           const pm = prevMonth(ym)
           if (pm) {
@@ -238,7 +240,7 @@ export default function YouTubePage() {
         setLoading(false)
       }
     },
-    [monthMode, comparisonMonths, ready, apiBase, page],
+    [monthMode, comparisonMonths, ready, apiBase, page, timezone],
   )
 
   useEffect(() => {
@@ -299,7 +301,7 @@ export default function YouTubePage() {
       }
       let doneMsg = 'Sync completado'
       if (monthMode === 'current' && months.length > 0) {
-        const ym = calendarYm()
+        const ym = calendarYm(timezone)
         if (!months.includes(ym)) {
           const labels = months.slice(0, 3).map((m) => formatMonthLabel(m))
           doneMsg += ` Esas publicaciones están en: ${labels.join(', ')}. Usá «Todos» para verlos.`
@@ -369,7 +371,7 @@ export default function YouTubePage() {
   const prevTotalViews = prevAggregates.total_views
   const totalCash = aggregates.total_cash
   const avgCtr = aggregates.avg_ctr
-  const prevYmForDelta = monthMode === 'current' ? prevMonth(calendarYm()) : null
+  const prevYmForDelta = monthMode === 'current' ? prevMonth(calendarYm(timezone)) : null
   const compareLabel = prevYmForDelta ? formatMonthLabel(prevYmForDelta) : ''
   const showMonthDeltas = monthMode === 'current' && prevYmForDelta !== null
   const viewsDelta =
@@ -519,8 +521,8 @@ export default function YouTubePage() {
             </>
           ) : monthMode === 'current' ? (
             <>
-              No hay videos con publicación en <span className="text-[var(--text2)]">{formatMonthLabel(calendarYm())}</span>{' '}
-              (Argentina). Probá <span className="text-[var(--text2)]">Todos</span> o <span className="text-[var(--text2)]">Comparar meses</span>.
+              No hay videos con publicación en <span className="text-[var(--text2)]">{formatMonthLabel(calendarYm(timezone))}</span>{' '}
+              (zona de la empresa). Probá <span className="text-[var(--text2)]">Todos</span> o <span className="text-[var(--text2)]">Comparar meses</span>.
             </>
           ) : (
             <>
@@ -567,7 +569,7 @@ export default function YouTubePage() {
           <div className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--bg2)] p-5">
             <div className="mb-4 text-[14px] font-semibold">Comparar meses</div>
             <p className="mb-4 text-[12px] text-[var(--text3)]">
-              Elegí dos meses (fecha de publicación YouTube, Argentina). Se listan los videos de ambos.
+              Elegí dos meses (fecha de publicación YouTube, zona de la empresa). Se listan los videos de ambos.
             </p>
             <div className="space-y-3">
               <div>
@@ -876,11 +878,12 @@ function PerfChart({ data }: { data: PerfSnapshot[] }) {
   )
 }
 
-function recentMonthOptions(count: number): string[] {
+function recentMonthOptions(count: number, timeZone: string): string[] {
   const out: string[] = []
-  const d = new Date()
+  const nowKey = monthKeyInCompanyTz(timeZone)
+  const [year, month] = nowKey.split('-').map(Number)
   for (let i = 0; i < count; i++) {
-    const x = new Date(d.getFullYear(), d.getMonth() - i, 1)
+    const x = new Date(year, month - 1 - i, 1)
     out.push(`${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`)
   }
   return out

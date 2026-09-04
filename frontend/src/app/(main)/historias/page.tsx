@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useToast } from '@/shared/components/toast'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
 import { formatCash } from '@/shared/lib/format-utils'
+import { todayIsoInCompanyTz } from '@/shared/lib/company-timezone'
 import { contentImageSrc } from '@/shared/lib/content-image-url'
 import { Line } from '@/shared/components/charts'
 import { apiFetch } from '@/lib/api'
@@ -446,7 +447,7 @@ export default function HistoriasPage() {
         const seqPositions: number[] = data.sequencePositions || []
         const allDescs: string[] = data.allSlides || data.slides || []
         const total = data.totalStoriesInGrid || allDescs.length
-        setForm(prev => ({ ...prev, dolor: data.dolor || '', fecha: prev.fecha || new Date().toISOString().split('T')[0] }))
+        setForm(prev => ({ ...prev, dolor: data.dolor || '', fecha: prev.fecha || todayIsoInCompanyTz() }))
         setFormAngulos(data.angulos || [])
         setFormSlides(allDescs)
         setFormSelected(new Set(seqPositions))
@@ -999,7 +1000,7 @@ export default function HistoriasPage() {
                       <div className="rounded-lg bg-[var(--bg4)] p-4 text-center">
                         <div className="text-[9px] uppercase tracking-wider text-[var(--text3)]">Cash por Chat</div>
                         <div className="font-mono-num text-2xl font-bold">
-                          {sec.chats > 0 ? formatCash(sec.cash_generado / sec.chats) : '$0'}
+                          {sec.chats > 0 ? formatCash(sec.cash_generado / sec.chats) : formatCash(0)}
                         </div>
                       </div>
                       <div className="rounded-lg bg-[var(--bg4)] p-4 text-center">

@@ -35,7 +35,7 @@ export type Lead = {
   program_offered: string | null
   /** Programa ofrecido en la llamada (BD `programada_ofrecido_llamada`); no usado en facturación. */
   programada_ofrecido_llamada: string | null
-  /** Precio USD del catálogo en BD (GET /leads); mismo criterio que Ajustes → Programas. */
+  /** Precio del catálogo en BD (GET /leads); mismo criterio que Ajustes → Programas. */
   program_price_usd?: number | null
   revenue: number
   payment: number
@@ -229,7 +229,7 @@ export function buildColumns(
     { key: 'dolores_llamada', label: 'Dolores llamada', width: 200, type: 'text', editable: true, defaultVisible: false },
     { key: 'razon_compra', label: 'Razón compra', width: 100, type: 'text', editable: true, defaultVisible: false },
     { key: 'ingresos_lead', label: 'Ingresos', width: 160, type: 'text', editable: false, defaultVisible: false },
-    { key: 'ingresos_mensuales', label: 'Ingresos lead ($)', width: 130, type: 'currency', editable: true, defaultVisible: false },
+    { key: 'ingresos_mensuales', label: 'Ingresos lead (€)', width: 130, type: 'currency', editable: true, defaultVisible: false },
     // Venta
     {
       key: 'programada_ofrecido_llamada',

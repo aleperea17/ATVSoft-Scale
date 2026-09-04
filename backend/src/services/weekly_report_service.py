@@ -243,7 +243,7 @@ def _format_closer_block(rows: list[dict[str, Any]]) -> str:
             f"- {r['fecha']} ({r['closer']}): "
             f"{r['llamadas_agendadas']} llamadas, {r['shows']} shows, {r['cierres']} cierres, "
             f"{r['calificados']} calificados, {r['descalificados']} descalificados, "
-            f"ingreso ${r['ingreso']:,.0f}"
+            f"ingreso €{r['ingreso']:,.0f}"
         )
     return "\n".join(lines)
 

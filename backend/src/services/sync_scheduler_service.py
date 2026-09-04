@@ -1,13 +1,13 @@
-"""APScheduler: intervalos dinámicos para auto_sync_stories, auto_refresh_reels_metrics y Calendly."""
+"""APScheduler: intervalos dinámicos; crons fijos en Europe/Madrid."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from apscheduler.triggers.interval import IntervalTrigger
 
+from src.services.company_config_service import get_company_tz
 from src.services.sync_settings_service import (
     auto_sync_enabled,
     get_calendly_interval_minutes,
@@ -15,11 +15,11 @@ from src.services.sync_settings_service import (
     get_stories_interval_minutes,
 )
 
-AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 STORIES_JOB_ID = "auto_sync_stories"
 REELS_JOB_ID = "auto_refresh_reels_metrics"
 REELS_NEW_SYNC_JOB_ID = "auto_sync_new_reels"
 CALENDLY_JOB_ID = "auto_sync_calendly"
+CLOSER_DAILY_REPORT_JOB_ID = "auto_closer_daily_reports"
 
 _scheduler: Any | None = None
 
@@ -45,12 +45,13 @@ def apply_sync_schedules(*, stories_run_immediately: bool = False) -> None:
     stories_m = get_stories_interval_minutes()
     reels_m = get_reels_interval_minutes()
     calendly_m = get_calendly_interval_minutes()
+    tz = get_company_tz()
 
     stories_job = _scheduler.get_job(STORIES_JOB_ID)
     if stories_job is not None:
         kwargs: dict[str, Any] = {"trigger": IntervalTrigger(minutes=stories_m)}
         if stories_run_immediately:
-            kwargs["next_run_time"] = datetime.now(AR_TZ)
+            kwargs["next_run_time"] = datetime.now(tz)
         _scheduler.reschedule_job(STORIES_JOB_ID, **kwargs)
 
     reels_job = _scheduler.get_job(REELS_JOB_ID)

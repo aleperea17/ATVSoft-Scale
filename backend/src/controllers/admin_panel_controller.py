@@ -22,7 +22,8 @@ from src.services.admin_panel_service import (
     verify_admin_password,
     verify_admin_panel_token,
 )
-from src.services.agent_closer_service import AR_TZ, list_llamadas_dia
+from src.services.agent_closer_service import list_llamadas_dia
+from src.services.company_config_service import company_now
 from src.services.programs_services import build_program_norm_price_map
 
 router = APIRouter(prefix="/api/admin/panel", tags=["admin-panel"], redirect_slashes=False)
@@ -98,7 +99,7 @@ def admin_panel_manual_call(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    now_ar = datetime.now(AR_TZ).replace(tzinfo=None)
+    now_local = company_now().replace(tzinfo=None)
     anchor = datetime(body.fecha.year, body.fecha.month, 15, 15, 0, 0)
 
     with db_session:
@@ -112,7 +113,7 @@ def admin_panel_manual_call(
             estado="Pendiente",
             closer=(body.closer or "").strip(),
             fecha_bot=anchor,
-            agendo=now_ar,
+            agendo=now_local,
             agendo_en="Panel corrección",
             call=call_at,
         )

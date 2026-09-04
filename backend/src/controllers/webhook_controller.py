@@ -311,7 +311,7 @@ def _qna_answer_at_position(qna: list, position: int) -> str | None:
 def _ingresos_lead_from_qna_answer(raw: str | None) -> float | None:
     if raw is None or not str(raw).strip():
         return None
-    s = str(raw).strip().replace(",", ".").replace("$", "")
+    s = str(raw).strip().replace(",", ".").replace("$", "").replace("€", "")
     try:
         return float(s)
     except ValueError:

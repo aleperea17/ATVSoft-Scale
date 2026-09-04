@@ -28,7 +28,7 @@
 # )
 # from src.services.manychat_service import ManychatService
 #
-# _AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
+# _COMPANY_TZ = get_company_tz()  # legado comentado: Europe/Madrid fijo
 #
 #
 # def _norm(s: str) -> str:
@@ -117,7 +117,7 @@
 #
 #
 # def _month_key_buenos_aires(raw: str | None) -> str | None:
-#     """YYYY-MM del instante según calendario en America/Argentina/Buenos_Aires."""
+#     """YYYY-MM del instante según calendario Europe/Madrid."""
 #     if not raw:
 #         return None
 #     s = str(raw).strip()
@@ -129,7 +129,7 @@
 #             dt = datetime.fromisoformat(s_iso)
 #             if dt.tzinfo is None:
 #                 dt = dt.replace(tzinfo=timezone.utc)
-#             return dt.astimezone(_AR_TZ).strftime("%Y-%m")
+#             return dt.astimezone(get_company_tz()).strftime("%Y-%m")
 #     except (ValueError, TypeError, OSError):
 #         pass
 #     # Fecha solo YYYY-MM-DD: mes civil explícito en el string
@@ -241,7 +241,7 @@
 #         if not user_id:
 #             raise HTTPException(status_code=401, detail="Invalid webhook token")
 #
-#         month = datetime.now(_AR_TZ).strftime("%Y-%m")
+#         month = datetime.now(get_company_tz()).strftime("%Y-%m")
 #         with db_session:
 #             ManychatChat(
 #                 user_id=user_id,

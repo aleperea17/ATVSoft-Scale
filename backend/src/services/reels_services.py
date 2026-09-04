@@ -7,7 +7,6 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, time as dt_time, timezone
-from zoneinfo import ZoneInfo
 
 import certifi
 from fastapi import HTTPException
@@ -16,8 +15,8 @@ from pony.orm import ObjectNotFound, db_session, rollback
 from src.db import db
 from src.models import ApiConnection, Lead, ReelContent
 from src.schemas import ReelKeywordPatchRequest, ReelPatchRequest, ReelResponse, ReelsListResponse
+from src.services.company_config_service import get_company_tz
 
-AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 _sync_lock = threading.Lock()
 _sync_states: dict[str, dict[str, int | str]] = {}
 _sync_tasks: dict[str, asyncio.Task] = {}
@@ -88,11 +87,11 @@ class ReelsServices:
     def _month_key_ar(cls, dt: datetime | None) -> str | None:
         if dt is None:
             return None
-        return cls._as_utc(dt).astimezone(AR_TZ).strftime("%Y-%m")
+        return cls._as_utc(dt).astimezone(get_company_tz()).strftime("%Y-%m")
 
     def _store_publication_utc(self, value: datetime) -> datetime:
         if value.tzinfo is None:
-            value = value.replace(tzinfo=AR_TZ)
+            value = value.replace(tzinfo=get_company_tz())
         return value.astimezone(timezone.utc)
 
     def _is_user_sync_running(self, user_id: str) -> bool:
@@ -867,19 +866,20 @@ AND EXISTS (
                     except Exception:
                         continue
 
-                    pub_ar = published_at.astimezone(AR_TZ)
+                    company_tz = get_company_tz()
+                    pub_local = published_at.astimezone(company_tz)
                     if sync_by_date and date_from is not None:
-                        lower = date_from.astimezone(AR_TZ) if date_from.tzinfo else date_from.replace(tzinfo=AR_TZ)
-                        if pub_ar < lower:
+                        lower = date_from.astimezone(company_tz) if date_from.tzinfo else date_from.replace(tzinfo=company_tz)
+                        if pub_local < lower:
                             stop_pagination = True
                             break
                         if date_to is not None:
-                            upper = date_to.astimezone(AR_TZ) if date_to.tzinfo else date_to.replace(tzinfo=AR_TZ)
-                            if pub_ar > upper:
+                            upper = date_to.astimezone(company_tz) if date_to.tzinfo else date_to.replace(tzinfo=company_tz)
+                            if pub_local > upper:
                                 continue
                     elif date_to is not None:
-                        upper = date_to.astimezone(AR_TZ) if date_to.tzinfo else date_to.replace(tzinfo=AR_TZ)
-                        if pub_ar > upper:
+                        upper = date_to.astimezone(company_tz) if date_to.tzinfo else date_to.replace(tzinfo=company_tz)
+                        if pub_local > upper:
                             continue
 
                     if minimal_preview:

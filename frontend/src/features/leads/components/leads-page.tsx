@@ -1662,7 +1662,7 @@ function LeadsTableCell({
           isPay && num > 0 ? 'text-[var(--green)]' :
           num === 0 ? 'text-[var(--text3)]' : ''
         }`}>
-          {num > 0 ? formatCash(num) : isOwed ? '—' : '$0'}
+          {num > 0 ? formatCash(num) : isOwed ? '—' : formatCash(0)}
         </span>
       )
     }
@@ -1928,7 +1928,7 @@ function LeadsTableCell({
           isPay && num > 0 ? 'text-[var(--green)]' :
           num === 0 ? 'text-[var(--text3)]' : ''
         }`}>
-        {num > 0 ? formatCash(num) : isOwed ? '—' : '$0'}
+        {num > 0 ? formatCash(num) : isOwed ? '—' : formatCash(0)}
       </span>
     )
   }

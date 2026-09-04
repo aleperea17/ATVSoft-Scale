@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useMonthContext } from '@/shared/components/app-providers'
+import { useMonthContext, useCompanyTimezone } from '@/shared/components/app-providers'
 import { MonthSelector } from '@/shared/components/month-selector'
 import { useToast } from '@/shared/components/toast'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
@@ -57,16 +57,15 @@ type BioViaOptionsResponse = {
   options?: string[]
 }
 
-const AR_TZ = 'America/Argentina/Buenos_Aires'
 const BIO_KEYWORD_DEFAULT = 'info'
 
-/** Fecha agendó: dd/mm/año en Argentina; si no es parseable, se muestra el texto tal cual. */
+/** Fecha agendó: dd/mm/año en TZ de la instancia; si no es parseable, se muestra el texto tal cual. */
 function formatCashPorChat(n: number): string {
-  if (n === 0) return '$0'
-  return `$${n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  if (n === 0) return formatCash(0)
+  return `€${n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-function formatFechaAgendoDisplay(raw: string | null | undefined): string {
+function formatFechaAgendoDisplay(raw: string | null | undefined, timeZone: string): string {
   if (!raw?.trim()) return '—'
   const s = raw.trim()
   const isoYmd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
@@ -77,7 +76,7 @@ function formatFechaAgendoDisplay(raw: string | null | undefined): string {
   const t = Date.parse(s)
   if (Number.isNaN(t)) return s
   return new Date(t).toLocaleDateString('es-AR', {
-    timeZone: AR_TZ,
+    timeZone,
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -86,6 +85,7 @@ function formatFechaAgendoDisplay(raw: string | null | undefined): string {
 
 export default function BioPage() {
   const { month, options, setMonth } = useMonthContext()
+  const { timezone } = useCompanyTimezone()
   const { toast } = useToast()
   const { ready, userId } = useAuthUser()
 
@@ -332,7 +332,7 @@ export default function BioPage() {
                   <span className="sr-only">{lead.agendo ? 'Agendó' : 'No agendó'}</span>
                 </div>
                 <div className="text-[12px] text-[var(--text3)]">
-                  {lead.subscribed_at ? new Date(lead.subscribed_at).toLocaleDateString('es-AR', { timeZone: AR_TZ, day: '2-digit', month: '2-digit' }) : '—'}
+                  {lead.subscribed_at ? new Date(lead.subscribed_at).toLocaleDateString('es-AR', { timeZone: timezone, day: '2-digit', month: '2-digit' }) : '—'}
                 </div>
                 <button
                   type="button"
@@ -350,7 +350,7 @@ export default function BioPage() {
                       <div><span className="text-[var(--text3)]">Nombre:</span> {lead.nombre || '—'}</div>
                       <div><span className="text-[var(--text3)]">Vía:</span> {lead.via || '—'}</div>
                       <div><span className="text-[var(--text3)]">Instagram:</span> {lead.handle}</div>
-                      <div><span className="text-[var(--text3)]">Entró al bot:</span> {lead.subscribed_at ? new Date(lead.subscribed_at).toLocaleString('es-AR', { timeZone: AR_TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '—'}</div>
+                      <div><span className="text-[var(--text3)]">Entró al bot:</span> {lead.subscribed_at ? new Date(lead.subscribed_at).toLocaleString('es-AR', { timeZone: timezone, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '—'}</div>
                       <div><span className="text-[var(--text3)]">Keyword:</span> {lead.keyword || '—'}</div>
                       <div><span className="text-[var(--text3)]">Cash por lead:</span> {formatCash(Number(lead.pago || 0))}</div>
                     </div>
@@ -366,7 +366,7 @@ export default function BioPage() {
                         <div><span className="text-[var(--text3)]">Setter:</span> {lead.setter || '—'}</div>
                         <div><span className="text-[var(--text3)]">Programa:</span> {lead.programa || '—'}</div>
                         <div><span className="text-[var(--text3)]">Pagó:</span> {formatCash(Number(lead.pago || 0))}</div>
-                        <div><span className="text-[var(--text3)]">Fecha agendó:</span> {formatFechaAgendoDisplay(lead.fecha_agendo)}</div>
+                        <div><span className="text-[var(--text3)]">Fecha agendó:</span> {formatFechaAgendoDisplay(lead.fecha_agendo, timezone)}</div>
                         <div><span className="text-[var(--text3)]">Dolores:</span> {lead.dolores || '—'}</div>
                         <div><span className="text-[var(--text3)]">Razón compra:</span> {lead.razon_compra || '—'}</div>
                         <div><span className="text-[var(--text3)]">Notas:</span> {lead.notas || '—'}</div>

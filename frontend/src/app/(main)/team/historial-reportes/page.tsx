@@ -5,6 +5,8 @@ import { useAuthUser } from '@/shared/hooks/use-auth-user'
 import { useToast } from '@/shared/components/toast'
 import { Modal } from '@/shared/components/modal'
 import { formatCash, formatIsoDateDdMmYyyy } from '@/shared/lib/format-utils'
+import { addCalendarDaysIso, todayIsoInCompanyTz } from '@/shared/lib/company-timezone'
+import { useCompanyTimezone } from '@/shared/components/app-providers'
 import { apiFetch } from '@/lib/api'
 
 const REPORTES_PAGE_SIZE = 20
@@ -64,10 +66,8 @@ function errMessage(data: unknown): string {
   return 'Error en la solicitud'
 }
 
-function defaultDesde(): string {
-  const d = new Date()
-  d.setDate(d.getDate() - 30)
-  return d.toISOString().split('T')[0]
+function defaultDesde(timeZone?: string): string {
+  return addCalendarDaysIso(todayIsoInCompanyTz(timeZone), -30)
 }
 
 /** `YYYY-MM` (input month) → primer y último día del mes en calendario local */
@@ -84,9 +84,9 @@ function ymToDesdeHasta(ym: string): { desde: string; hasta: string } | null {
   return { desde, hasta }
 }
 
-function currentYm(): string {
-  const n = new Date()
-  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`
+function currentYm(timeZone?: string): string {
+  const today = todayIsoInCompanyTz(timeZone)
+  return today.slice(0, 7)
 }
 
 const PDF_MES_OPCIONES: { v: string; nombre: string }[] = [
@@ -277,9 +277,10 @@ function ReportDetail({ r }: { r: ReportRow }) {
 
 export default function TeamHistorialReportesPage() {
   const { ready, userId } = useAuthUser()
+  const { timezone } = useCompanyTimezone()
   const { toast } = useToast()
-  const [desde, setDesde] = useState(defaultDesde)
-  const [hasta, setHasta] = useState(() => new Date().toISOString().split('T')[0])
+  const [desde, setDesde] = useState(() => defaultDesde())
+  const [hasta, setHasta] = useState(() => todayIsoInCompanyTz())
   const [roleFilter, setRoleFilter] = useState<ReporteFiltro>('todos')
   const [diaFiltro, setDiaFiltro] = useState('')
   const [page, setPage] = useState(1)
@@ -293,6 +294,12 @@ export default function TeamHistorialReportesPage() {
   const [pdfHastaModal, setPdfHastaModal] = useState('')
   const [pdfFiltro, setPdfFiltro] = useState<ReporteFiltro>('todos')
   const [discordSendingId, setDiscordSendingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    setHasta(todayIsoInCompanyTz(timezone))
+    setDesde(defaultDesde(timezone))
+    setPdfMonth(currentYm(timezone))
+  }, [timezone])
 
   const fetchReports = useCallback(async () => {
     if (!ready || !userId) {
@@ -364,7 +371,7 @@ export default function TeamHistorialReportesPage() {
 
   const openPdfModal = useCallback(() => {
     setPdfMode('mes')
-    const ym = hasta.length >= 7 ? hasta.slice(0, 7) : currentYm()
+    const ym = hasta.length >= 7 ? hasta.slice(0, 7) : currentYm(timezone)
     setPdfMonth(ym)
     setPdfDesdeModal(desde)
     setPdfHastaModal(hasta)

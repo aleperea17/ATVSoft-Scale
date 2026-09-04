@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from src.models import ApiConnection
 
-AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 TOKEN_LIFETIME_DAYS = 60
 
 

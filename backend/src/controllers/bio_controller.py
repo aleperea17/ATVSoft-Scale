@@ -3,13 +3,12 @@
 from datetime import datetime
 from typing import Annotated
 
-from zoneinfo import ZoneInfo
-
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pony.orm import ObjectNotFound, db_session
 
 from src.models import ApiConnection, Lead as LeadEntity
 from src.schemas import BioLeadResponse, BioLeadStatusPatchRequest, BioLeadsListResponse, BioMetricsResponse, BioViaOptionsResponse
+from src.services.company_config_service import company_today
 
 router = APIRouter(prefix="/api/bio", tags=["bio"], redirect_slashes=False)
 
@@ -50,16 +49,13 @@ def _anchor_dt(row: LeadEntity) -> datetime | None:
     return row.fecha_bot or row.created_at
 
 
-_AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
-
-
 def _today_calendar_ar() -> tuple[int, int, int]:
-    d = datetime.now(_AR_TZ).date()
+    d = company_today()
     return d.year, d.month, d.day
 
 
 def _max_day_mtd(month_key: tuple[int, int] | None) -> int | None:
-    """Si el mes pedido es el mes actual en Argentina, contar solo hasta hoy (MTD). Si no, mes completo."""
+    """Si el mes pedido es el mes actual en la zona de la empresa, contar solo hasta hoy (MTD). Si no, mes completo."""
     if month_key is None:
         return None
     y, mn = month_key

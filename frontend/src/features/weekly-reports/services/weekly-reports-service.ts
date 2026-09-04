@@ -1,4 +1,5 @@
 import { apiFetch, backendAuthHeaders, formatApiDetail } from '@/lib/api'
+import { todayIsoInCompanyTz } from '@/shared/lib/company-timezone'
 
 const API_BASE =
   (process.env.NEXT_PUBLIC_BACKEND_URL || '').trim().replace(/\/$/, '') || '/api-backend'
@@ -92,7 +93,7 @@ export function formatWeekRange(inicio: string, fin: string): string {
 }
 
 export function todayIso(): string {
-  return new Date().toISOString().split('T')[0]
+  return todayIsoInCompanyTz()
 }
 
 export function mondayOfWeek(iso: string): string {

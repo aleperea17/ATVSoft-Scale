@@ -5,8 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import { useToast } from '@/shared/components/toast'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
-
-const AR_TZ = 'America/Argentina/Buenos_Aires'
+import { useCompanyTimezone } from '@/shared/components/app-providers'
 const PAGE_SIZE = 20
 
 type ReelSummary = {
@@ -39,7 +38,7 @@ type KeywordsResponse = {
   total?: number
 }
 
-function formatPublishedDate(isoDate: string | null): string {
+function formatPublishedDate(isoDate: string | null, timeZone: string): string {
   if (!isoDate?.trim()) return ''
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate.trim())
   if (m) {
@@ -48,22 +47,24 @@ function formatPublishedDate(isoDate: string | null): string {
   }
   const t = Date.parse(isoDate)
   if (Number.isNaN(t)) return ''
-  return new Date(t).toLocaleDateString('es-AR', { timeZone: AR_TZ, day: '2-digit', month: '2-digit' })
+  return new Date(t).toLocaleDateString('es-AR', { timeZone, day: '2-digit', month: '2-digit' })
 }
 
 function ReelLeadCard({
   reel,
   selected,
   onSelect,
+  timeZone,
 }: {
   reel: ReelSummary
   selected: boolean
   onSelect: () => void
+  timeZone: string
 }) {
   const [imgErr, setImgErr] = useState(false)
   const rawThumb = reel.thumbnail_url?.trim() || ''
   const thumb = rawThumb && !imgErr ? `/api/proxy-image?url=${encodeURIComponent(rawThumb)}` : ''
-  const dateLabel = formatPublishedDate(reel.published_at)
+  const dateLabel = formatPublishedDate(reel.published_at, timeZone)
 
   return (
     <button
@@ -131,6 +132,7 @@ function ReelLeadCard({
 export default function KeywordsPage() {
   const { toast } = useToast()
   const { ready } = useAuthUser()
+  const { timezone } = useCompanyTimezone()
   const [loading, setLoading] = useState(true)
   const [reels, setReels] = useState<ReelSummary[]>([])
   const [totalLeads, setTotalLeads] = useState(0)
@@ -243,6 +245,7 @@ export default function KeywordsPage() {
               key={reel.reel_id}
               reel={reel}
               selected={selectedReelId === reel.reel_id}
+              timeZone={timezone}
               onSelect={() => {
                 setSelectedReelId((prev) => (prev === reel.reel_id ? null : reel.reel_id))
                 setLeadPage(1)

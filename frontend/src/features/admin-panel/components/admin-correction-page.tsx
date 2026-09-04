@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { DailyPanelPage } from '@/features/daily-panel/components/daily-panel-page'
+import { todayIsoInCompanyTz } from '@/shared/lib/company-timezone'
 import {
   readAdminPanelToken,
   verifyAdminPanelToken,
@@ -9,7 +10,7 @@ import {
 import { AdminPanelPasswordGate } from './admin-panel-password-gate'
 
 function todayIso(): string {
-  return new Date().toISOString().split('T')[0]
+  return todayIsoInCompanyTz()
 }
 
 export function AdminCorrectionPage() {
