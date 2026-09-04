@@ -254,7 +254,7 @@ export default function TasaRefrescoPage() {
         />
         <IntervalField
           label="Reels"
-          description="Refresh de métricas en BD para reels ya importados (views, reach, likes, etc.). A las 23:59 (zona de la empresa) corre además un job fijo que busca reels nuevos y refresca métricas."
+          description="Refresh de métricas en BD para reels ya importados (views, reach, likes, etc.). A las 23:59 (España) corre además un job fijo que busca reels nuevos y refresca métricas."
           value={reelsMin}
           disabled={saving}
           min={min}
@@ -270,7 +270,7 @@ export default function TasaRefrescoPage() {
             <span className="font-medium text-[var(--text2)]">
               {formatNextRun(settings.reels_new_sync_next)}
             </span>{' '}
-            (23:59 zona de la empresa — «Buscar nuevos reels» y «Actualizar métricas»).
+            (23:59 España — «Buscar nuevos reels» y «Actualizar métricas»).
           </p>
         ) : null}
         <IntervalField

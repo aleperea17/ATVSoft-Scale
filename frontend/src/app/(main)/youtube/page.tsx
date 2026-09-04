@@ -522,7 +522,7 @@ export default function YouTubePage() {
           ) : monthMode === 'current' ? (
             <>
               No hay videos con publicación en <span className="text-[var(--text2)]">{formatMonthLabel(calendarYm(timezone))}</span>{' '}
-              (zona de la empresa). Probá <span className="text-[var(--text2)]">Todos</span> o <span className="text-[var(--text2)]">Comparar meses</span>.
+              (España). Probá <span className="text-[var(--text2)]">Todos</span> o <span className="text-[var(--text2)]">Comparar meses</span>.
             </>
           ) : (
             <>
@@ -569,7 +569,7 @@ export default function YouTubePage() {
           <div className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--bg2)] p-5">
             <div className="mb-4 text-[14px] font-semibold">Comparar meses</div>
             <p className="mb-4 text-[12px] text-[var(--text3)]">
-              Elegí dos meses (fecha de publicación YouTube, zona de la empresa). Se listan los videos de ambos.
+              Elegí dos meses (fecha de publicación YouTube, España). Se listan los videos de ambos.
             </p>
             <div className="space-y-3">
               <div>

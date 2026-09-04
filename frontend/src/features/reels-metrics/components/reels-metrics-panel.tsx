@@ -440,7 +440,7 @@ export function ReelsMetricsPanel() {
               setSelectedWeek('all')
             }}
             disabled={!dateFiltersEnabled}
-            title={dateFiltersEnabled ? 'Año de publicación (zona empresa)' : dateFilterHint}
+            title={dateFiltersEnabled ? 'Año de publicación (España)' : dateFilterHint}
             className={filterSelectClass}
           >
             <option value="all">Todos</option>

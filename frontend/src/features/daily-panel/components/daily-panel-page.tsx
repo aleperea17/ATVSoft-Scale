@@ -482,7 +482,7 @@ export function DailyPanelPage({
               </button>
             )}
             <span className="neo-panel__date-tz">
-              · zona empresa
+              · España
               {isAdmin ? ' · modo admin' : ''}
             </span>
           </div>
