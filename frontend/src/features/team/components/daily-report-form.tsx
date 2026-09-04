@@ -6,6 +6,7 @@ import { useToast } from '@/shared/components/toast'
 import { formatCash } from '@/shared/lib/format-utils'
 import { todayIsoInCompanyTz } from '@/shared/lib/company-timezone'
 import { useCompanyTimezone } from '@/shared/components/app-providers'
+import { DEFAULT_AVATARS } from '@/shared/constants/avatar-defaults'
 import { apiFetch } from '@/lib/api'
 
 type TeamMemberOption = { id: number; nombre: string }
@@ -31,18 +32,23 @@ type DailyReport = {
   dia_bueno_malo: string
 }
 
-const SETTER_AVATAR_OPTIONS = [
-  'Experto en info',
-  'Dueño de agencia',
-  'Dueño de negocio',
-  'Habilidades de alto valor',
-  'Creador de contenido',
-  'Creador con infoproducto',
-  'Otro',
-] as const
+const FALLBACK_AVATAR_OPTIONS = DEFAULT_AVATARS.map((a) => a.nombre)
 
-function emptyAvatarCounts(): Record<string, number> {
-  return Object.fromEntries(SETTER_AVATAR_OPTIONS.map((a) => [a, 0]))
+function emptyAvatarCounts(options: string[]): Record<string, number> {
+  return Object.fromEntries(options.map((a) => [a, 0]))
+}
+
+/** Reconstruye conteos para la lista viva; conserva valores > 0 de nombres que siguen activos. */
+function mergeAvatarCounts(
+  options: string[],
+  prev: Record<string, number>,
+): Record<string, number> {
+  const next = emptyAvatarCounts(options)
+  for (const name of options) {
+    const n = parseInt(String(prev[name] ?? 0), 10) || 0
+    if (n > 0) next[name] = n
+  }
+  return next
 }
 
 function serializeAvatarCounts(counts: Record<string, number>): string | null {
@@ -105,6 +111,7 @@ export function DailyReportSection({ role }: Props) {
     descalificados: 0,
     ingreso: 0,
   })
+  const [avatarOptions, setAvatarOptions] = useState<string[]>(FALLBACK_AVATAR_OPTIONS)
 
   const today = todayIsoInCompanyTz(timezone)
 
@@ -122,12 +129,43 @@ export function DailyReportSection({ role }: Props) {
     ingreso: 0,
     notes: '',
     sentimiento_trafico: '',
-    avatar_counts: emptyAvatarCounts(),
+    avatar_counts: emptyAvatarCounts(FALLBACK_AVATAR_OPTIONS),
     insights_marketing: '',
     seguimientos: 0,
     outbounds: 0,
     dia_bueno_malo: '',
   })
+
+  const applyAvatarOptions = useCallback((names: string[]) => {
+    const options = names.length > 0 ? names : FALLBACK_AVATAR_OPTIONS
+    setAvatarOptions(options)
+    setForm((f) => ({
+      ...f,
+      avatar_counts: mergeAvatarCounts(options, f.avatar_counts),
+    }))
+  }, [])
+
+  const fetchAvatars = useCallback(async () => {
+    if (role !== 'setter' || !ready || !userId) return
+    try {
+      const res = await apiFetch('/avatars')
+      const data = (await res.json().catch(() => ({}))) as {
+        avatars?: { nombre: string; activo?: boolean }[]
+      }
+      if (!res.ok) {
+        applyAvatarOptions(FALLBACK_AVATAR_OPTIONS)
+        return
+      }
+      const active = (Array.isArray(data.avatars) ? data.avatars : [])
+        .filter((a) => a.activo !== false)
+        .map((a) => String(a.nombre ?? '').trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, 'es'))
+      applyAvatarOptions(active)
+    } catch {
+      applyAvatarOptions(FALLBACK_AVATAR_OPTIONS)
+    }
+  }, [role, ready, userId, applyAvatarOptions])
 
   const fetchMembers = useCallback(async () => {
     if (!ready || !userId) {
@@ -160,6 +198,19 @@ export function DailyReportSection({ role }: Props) {
   useEffect(() => {
     void fetchMembers()
   }, [fetchMembers])
+
+  useEffect(() => {
+    void fetchAvatars()
+  }, [fetchAvatars])
+
+  useEffect(() => {
+    if (role !== 'setter') return
+    const refresh = () => {
+      void fetchAvatars()
+    }
+    window.addEventListener('avatar-types-updated', refresh)
+    return () => window.removeEventListener('avatar-types-updated', refresh)
+  }, [role, fetchAvatars])
 
   useEffect(() => {
     const next = todayIsoInCompanyTz(timezone)
@@ -580,33 +631,39 @@ export function DailyReportSection({ role }: Props) {
               Avatar / Tipo de agendas generadas
             </label>
             <div className="space-y-2 rounded-lg border border-[var(--border2)] bg-[var(--bg3)] p-3">
-              {SETTER_AVATAR_OPTIONS.map((avatar) => (
-                <div key={avatar} className="flex items-center justify-between gap-3">
-                  <span className="min-w-0 flex-1 text-[12px] leading-snug text-[var(--text2)]">{avatar}</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={(form.avatar_counts[avatar] ?? 0) === 0 ? '' : form.avatar_counts[avatar]}
-                    onChange={(e) => {
-                      const raw = e.target.value
-                      if (raw === '') {
+              {avatarOptions.length === 0 ? (
+                <p className="text-[12px] text-[var(--text3)]">
+                  No hay avatares activos. Cargalos en Ajustes → Avatares.
+                </p>
+              ) : (
+                avatarOptions.map((avatar) => (
+                  <div key={avatar} className="flex items-center justify-between gap-3">
+                    <span className="min-w-0 flex-1 text-[12px] leading-snug text-[var(--text2)]">{avatar}</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={(form.avatar_counts[avatar] ?? 0) === 0 ? '' : form.avatar_counts[avatar]}
+                      onChange={(e) => {
+                        const raw = e.target.value
+                        if (raw === '') {
+                          setForm((f) => ({
+                            ...f,
+                            avatar_counts: { ...f.avatar_counts, [avatar]: 0 },
+                          }))
+                          return
+                        }
+                        const n = parseInt(raw, 10) || 0
                         setForm((f) => ({
                           ...f,
-                          avatar_counts: { ...f.avatar_counts, [avatar]: 0 },
+                          avatar_counts: { ...f.avatar_counts, [avatar]: n },
                         }))
-                        return
-                      }
-                      const n = parseInt(raw, 10) || 0
-                      setForm((f) => ({
-                        ...f,
-                        avatar_counts: { ...f.avatar_counts, [avatar]: n },
-                      }))
-                    }}
-                    placeholder="0"
-                    className="w-20 shrink-0 rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-2 py-1.5 text-right text-[13px] text-[var(--text)] outline-none focus:border-[var(--text3)]"
-                  />
-                </div>
-              ))}
+                      }}
+                      placeholder="0"
+                      className="w-20 shrink-0 rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-2 py-1.5 text-right text-[13px] text-[var(--text)] outline-none focus:border-[var(--text3)]"
+                    />
+                  </div>
+                ))
+              )}
             </div>
           </div>
           <div className="mb-4 space-y-4">
