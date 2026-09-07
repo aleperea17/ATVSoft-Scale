@@ -789,6 +789,7 @@ export default function ReelsPage() {
             <ReelCard
               key={reel.id}
               reel={reel}
+              timezone={timezone}
               masterLists={masterLists}
               isExpanded={expanded === reel.id}
               onToggle={() => setExpanded(expanded === reel.id ? null : reel.id)}
@@ -1039,6 +1040,7 @@ export default function ReelsPage() {
 
 function ReelCard({
   reel,
+  timezone,
   masterLists,
   isExpanded,
   onToggle,
@@ -1048,6 +1050,7 @@ function ReelCard({
   onRefresh,
 }: {
   reel: Reel
+  timezone: string
   masterLists: { dolores: string[]; angulos: string[]; ctas: string[] }
   isExpanded: boolean
   onToggle: () => void
