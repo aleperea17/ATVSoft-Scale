@@ -1,4 +1,9 @@
 import { AVATAR_COLORS, AVATAR_OPTIONS } from '@/shared/constants/avatar-defaults'
+import {
+  STATUS_COLORS as DEFAULT_STATUS_COLORS,
+  STATUS_OPTIONS as DEFAULT_STATUS_OPTIONS,
+} from '@/shared/constants/lead-status-defaults'
+import { buildStatusTabs } from '@/shared/lib/lead-status-flags'
 
 export type HotLead = {
   id: string
@@ -38,29 +43,15 @@ export const CALIDAD_COLORS: Record<string, string> = {
   Perfecto: '#F59E0B',
 }
 
-export const STATUS_OPTIONS = [
-  'Prospectar',
-  'Pendiente',
-  'Seguimiento',
-  'Seña',
-  'Cerrado',
-  'No show',
-  'Re-agenda',
-  'Descalificado',
-]
+export const STATUS_OPTIONS = ['Prospectar', ...DEFAULT_STATUS_OPTIONS]
 
 export const STATUS_COLORS: Record<string, string> = {
   Prospectar: '#6B7280',
-  Cerrado: '#4ADE80',
-  Seguimiento: '#60A5FA',
-  'Seña': '#FBBF24',
-  'No show': '#F87171',
-  'Re-agenda': '#FB923C',
-  Descalificado: '#A855F7',
-  Pendiente: '#94A3B8',
+  ...DEFAULT_STATUS_COLORS,
 }
 
-export const STATUS_TABS = ['Todos', 'Prospectar', 'Seguimiento', 'Cerrados', 'No show', 'Pendiente', 'Descalificado']
+/** Tabs: Todos + Prospectar + Cerrados + estados no-cierre del catálogo default. */
+export const STATUS_TABS = ['Todos', 'Prospectar', ...buildStatusTabs().slice(1)]
 
 export const HOT_LEAD_COLUMNS: HotLeadColumnDef[] = [
   { key: 'nombre', label: 'Nombre', width: 180, type: 'text', editable: true, sticky: true },

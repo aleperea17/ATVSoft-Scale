@@ -1,12 +1,9 @@
 'use client'
 
 import { useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react'
-import {
-  canonicalLeadStatus,
-  PROGRAM_COLORS,
-  STATUS_COLORS,
-  STATUS_OPTIONS,
-} from '@/features/leads/types'
+import { PROGRAM_COLORS } from '@/features/leads/types'
+import { STATUS_COLORS, STATUS_OPTIONS } from '@/shared/constants/lead-status-defaults'
+import { canonicalLeadStatus } from '@/shared/lib/lead-status-flags'
 import { formatCash } from '@/shared/lib/format-utils'
 import type { DailyCall } from '../types'
 import { buildCloserOptions } from '../services/daily-panel-service'

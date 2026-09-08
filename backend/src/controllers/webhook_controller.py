@@ -6,6 +6,7 @@ from pony.orm import db_session
 from src.env_public import manychat_webhook_token
 from src.lead_display_utils import compute_dias_para_agendar
 from src.models import ApiConnection, Lead, ReelContent
+from src.services.lead_statuses_services import booking_lead_status_name
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"], redirect_slashes=False)
 
@@ -545,11 +546,14 @@ async def calendly_webhook(request: Request) -> dict[str, str]:
         user_id = int(calendly_conns[0].user_id)
 
         row = _find_lead_for_calendly(user_id, display_name, ig_hint)
+        booking = booking_lead_status_name(user_id)
         if row is not None:
             row.agendo = form_completed_at
             if start_dt is not None:
                 row.call = start_dt
             row.agendo_en = "Chat"
+            row.status = booking
+            row.estado = booking
             if display_name:
                 row.nombre = display_name
             if email:
@@ -582,6 +586,8 @@ async def calendly_webhook(request: Request) -> dict[str, str]:
                 agendo=form_completed_at,
                 call=start_dt,
                 agendo_en="Chat",
+                status=booking,
+                estado=booking,
                 notas="\n".join(notas_parts),
             )
             _apply_calendly_form_fields(row, form_fields)

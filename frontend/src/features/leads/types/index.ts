@@ -2,6 +2,14 @@ import {
   AVATAR_COLORS,
   AVATAR_OPTIONS,
 } from '@/shared/constants/avatar-defaults'
+import {
+  STATUS_COLORS,
+  STATUS_OPTIONS,
+} from '@/shared/constants/lead-status-defaults'
+import {
+  buildStatusTabs,
+  canonicalLeadStatus,
+} from '@/shared/lib/lead-status-flags'
 
 export type Lead = {
   id: string
@@ -53,6 +61,8 @@ export type Lead = {
   ingresos_rango?: string | null
   /** Respuestas completas del pre-agenda Calendly (columna formulario). */
   formulario?: string | null
+  /** YYYY-MM-DD seguimiento de pago. */
+  fecha_seguimiento_pago?: string | null
   /** Días desde 1er contacto hasta formulario Calendly (API calculado). */
   dias_agendamiento: number | null
   ingresos_mensuales: number
@@ -92,17 +102,9 @@ export type FilterConfig = {
   value: string
 }
 
-export const STATUS_COLORS: Record<string, string> = {
-  Cerrado: '#4ADE80',
-  Seguimiento: '#60A5FA',
-  'Seña': '#FBBF24',
-  'No show': '#F87171',
-  'Re-agenda': '#FB923C',
-  Descalificado: '#A855F7',
-  Pendiente: '#94A3B8',
-}
-
 export { AVATAR_COLORS, AVATAR_OPTIONS }
+export { STATUS_COLORS, STATUS_OPTIONS }
+export { canonicalLeadStatus, buildStatusTabs }
 
 export const PROGRAM_COLORS: Record<string, string> = {
   Boost: '#F59E0B',
@@ -110,7 +112,6 @@ export const PROGRAM_COLORS: Record<string, string> = {
   Mentoria: '#22C55E',
 }
 
-export const STATUS_OPTIONS = ['Pendiente', 'Seguimiento', 'Seña', 'Cerrado', 'No show', 'Re-agenda', 'Descalificado']
 export const PROGRAM_OPTIONS = ['', 'Boost', 'Advantage', 'Mentoria']
 export const ORIGIN_OPTIONS = ['Referido', 'Setter', 'Youtube', 'Lead viejo (seguimiento)'] as const
 
@@ -128,55 +129,8 @@ export const ORIGIN_COLORS: Record<string, string> = {
   'Lead viejo (seguimiento)': '#A855F7',
 }
 
-export const STATUS_TABS = ['Todos', 'Cerrados', 'Seguimiento', 'No show', 'Pendiente', 'Descalificado']
-
-function normStatusKey(s: string): string {
-  return s
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-    .trim()
-    .toLowerCase()
-    .replace(/-/g, ' ')
-    .replace(/\s+/g, ' ')
-}
-
-/**
- * Unifica variantes de texto libre al valor canónico de STATUS_OPTIONS
- * para filtros, colores y selects.
- */
-export function canonicalLeadStatus(raw: string | null | undefined): string {
-  const s = (raw ?? '').trim()
-  if (!s) return 'Pendiente'
-  const n = normStatusKey(s)
-  const synonyms: Record<string, string> = {
-    cerrado: 'Cerrado',
-    cerrados: 'Cerrado',
-    closed: 'Cerrado',
-    won: 'Cerrado',
-    seguimiento: 'Seguimiento',
-    'en seguimiento': 'Seguimiento',
-    follow: 'Seguimiento',
-    'follow up': 'Seguimiento',
-    'no show': 'No show',
-    noshow: 'No show',
-    'no asistio': 'No show',
-    'no asistió': 'No show',
-    pendiente: 'Pendiente',
-    pending: 'Pendiente',
-    descalificado: 'Descalificado',
-    disqualificado: 'Descalificado',
-    disqualified: 'Descalificado',
-    're-agenda': 'Re-agenda',
-    're agenda': 'Re-agenda',
-    reagenda: 'Re-agenda',
-    seña: 'Seña',
-    sena: 'Seña',
-  }
-  if (synonyms[n]) return synonyms[n]
-  const fromOptions = STATUS_OPTIONS.find((o) => normStatusKey(o) === n)
-  if (fromOptions) return fromOptions
-  return s
-}
+/** Tabs base; preferí `buildStatusTabs(catalog)` en runtime. */
+export const STATUS_TABS = buildStatusTabs()
 
 export const SETTER_COLORS: Record<string, string> = {
   _default: '#3B82F6',
@@ -192,11 +146,14 @@ export function buildColumns(
   closerNames: string[],
   programOffered?: { options: string[]; colors: Record<string, string> },
   avatarMeta?: { options: string[]; colors: Record<string, string> },
+  statusMeta?: { options: string[]; colors: Record<string, string> },
 ): ColumnDef[] {
   const progOpts = programOffered?.options ?? PROGRAM_OPTIONS
   const progColors = { ...PROGRAM_COLORS, ...(programOffered?.colors ?? {}) }
   const avatarOpts = avatarMeta?.options ?? AVATAR_OPTIONS
   const avatarColors = { ...AVATAR_COLORS, ...(avatarMeta?.colors ?? {}) }
+  const statusOpts = statusMeta?.options ?? STATUS_OPTIONS
+  const statusColors = { ...STATUS_COLORS, ...(statusMeta?.colors ?? {}) }
   return [
     // Datos de contacto
     { key: 'client_name', label: 'Nombre', width: 160, type: 'text', editable: true, sticky: true, defaultVisible: true },
@@ -206,7 +163,15 @@ export function buildColumns(
     { key: 'formulario', label: 'Formulario', width: 120, type: 'text', editable: false, defaultVisible: true },
     { key: 'avatar_type', label: 'Avatar', width: 170, type: 'badge', editable: true, options: avatarOpts, colors: avatarColors, defaultVisible: true },
     // Estado y equipo
-    { key: 'status', label: 'Status', width: 130, type: 'select', editable: true, options: STATUS_OPTIONS, colors: STATUS_COLORS, defaultVisible: true },
+    { key: 'status', label: 'Status', width: 150, type: 'select', editable: true, options: statusOpts, colors: statusColors, defaultVisible: true },
+    {
+      key: 'fecha_seguimiento_pago',
+      label: 'Seg. pago',
+      width: 130,
+      type: 'date',
+      editable: true,
+      defaultVisible: true,
+    },
     { key: 'origin', label: 'Origen', width: 200, type: 'select', editable: true, options: [...ORIGIN_OPTIONS], colors: ORIGIN_COLORS, defaultVisible: true },
     // entry_funnel (keyword) no se muestra en esta vista
     { key: 'agenda_point', label: 'Pto agenda', width: 160, type: 'badge', editable: false, options: [''], colors: {}, defaultVisible: true },

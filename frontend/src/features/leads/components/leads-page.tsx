@@ -14,15 +14,22 @@ import {
   ColumnDef,
   SortConfig,
   FilterConfig,
-  STATUS_TABS,
   buildColumns,
-  canonicalLeadStatus,
   ORIGIN_OPTIONS,
   AGENDO_EN_OPTIONS,
   PROGRAM_COLORS,
   AVATAR_COLORS,
   AVATAR_OPTIONS,
 } from '../types'
+import {
+  activeStatusOptions,
+  buildStatusTabs,
+  canonicalLeadStatus,
+  resolveLeadStatusFlags,
+  statusColorMap,
+  type LeadStatusCatalogItem,
+} from '@/shared/lib/lead-status-flags'
+import { setLeadStatusCatalog, getLeadStatusCatalog } from '../services/leads-analytics'
 
 type AgendaReelLookup = { title: string; publishedAt: string | null }
 type AgendaSequenceLookup = { title: string; sequenceDate: string | null }
@@ -54,7 +61,7 @@ function formatAgendaPointBadgeText(
 ): string {
   const k = String(raw || '').trim()
   if (!k) return ''
-  if (k.toLowerCase() === 'bio') return '[BIO]'
+  if (k.toLowerCase() === 'bio') return '[Formulario]'
   const yt = /^youtube:(\d+)$/i.exec(k)
   if (yt) {
     const id = yt[1]
@@ -226,6 +233,7 @@ export function LeadsPage() {
   const [closerNames, setCloserNames] = useState<string[]>([])
   const [offeredPrograms, setOfferedPrograms] = useState<{ id: number; name: string; price_usd: number }[]>([])
   const [avatarTypes, setAvatarTypes] = useState<{ id: number; nombre: string; color: string; activo: boolean }[]>([])
+  const [statusCatalog, setStatusCatalog] = useState<LeadStatusCatalogItem[]>([])
 
   const programColumnMeta = useMemo(() => {
     const names = offeredPrograms
@@ -255,10 +263,21 @@ export function LeadsPage() {
     return { options, colors }
   }, [avatarTypes])
 
-  // Dynamic columns based on team members + programas + avatares (Ajustes)
+  const statusColumnMeta = useMemo(() => {
+    const opts = activeStatusOptions(statusCatalog.length > 0 ? statusCatalog : null)
+    const colors = statusColorMap(statusCatalog.length > 0 ? statusCatalog : null)
+    return { options: opts, colors }
+  }, [statusCatalog])
+
+  const statusTabs = useMemo(
+    () => buildStatusTabs(statusCatalog.length > 0 ? statusCatalog : null),
+    [statusCatalog],
+  )
+
+  // Dynamic columns based on team members + programas + avatares + estados (Ajustes)
   const COLUMNS = useMemo(
-    () => buildColumns(setterNames, closerNames, programColumnMeta, avatarColumnMeta),
-    [setterNames, closerNames, programColumnMeta, avatarColumnMeta],
+    () => buildColumns(setterNames, closerNames, programColumnMeta, avatarColumnMeta, statusColumnMeta),
+    [setterNames, closerNames, programColumnMeta, avatarColumnMeta, statusColumnMeta],
   )
 
   // UI state
@@ -269,6 +288,16 @@ export function LeadsPage() {
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() =>
     new Set(buildColumns([], []).filter(c => c.defaultVisible).map(c => c.key))
   )
+
+  // Mantener «Seg. pago» visible aunque el usuario oculte columnas en una sesión previa.
+  useEffect(() => {
+    setVisibleColumns((prev) => {
+      if (prev.has('fecha_seguimiento_pago')) return prev
+      const next = new Set(prev)
+      next.add('fecha_seguimiento_pago')
+      return next
+    })
+  }, [])
   const [groupBy, setGroupBy] = useState<string | null>(null)
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
 
@@ -376,6 +405,31 @@ export function LeadsPage() {
       setAvatarTypes(Array.isArray(data.avatars) ? data.avatars : [])
     } catch {
       setAvatarTypes([])
+    }
+  }, [ready, userId])
+
+  const fetchLeadStatuses = useCallback(async () => {
+    if (!ready || !userId) {
+      setStatusCatalog([])
+      setLeadStatusCatalog(null)
+      return
+    }
+    try {
+      const res = await apiFetch('/lead-statuses')
+      const data = (await res.json().catch(() => ({}))) as {
+        statuses?: LeadStatusCatalogItem[]
+      }
+      if (!res.ok) {
+        setStatusCatalog([])
+        setLeadStatusCatalog(null)
+        return
+      }
+      const list = Array.isArray(data.statuses) ? data.statuses : []
+      setStatusCatalog(list)
+      setLeadStatusCatalog(list)
+    } catch {
+      setStatusCatalog([])
+      setLeadStatusCatalog(null)
     }
   }, [ready, userId])
 
@@ -522,7 +576,8 @@ export function LeadsPage() {
     void fetchTeamMembers()
     void fetchPrograms()
     void fetchAvatars()
-  }, [fetchTeamMembers, fetchPrograms, fetchAvatars])
+    void fetchLeadStatuses()
+  }, [fetchTeamMembers, fetchPrograms, fetchAvatars, fetchLeadStatuses])
 
   useEffect(() => {
     const refresh = () => {
@@ -539,6 +594,15 @@ export function LeadsPage() {
     window.addEventListener('avatar-types-updated', refresh)
     return () => window.removeEventListener('avatar-types-updated', refresh)
   }, [fetchAvatars])
+
+  useEffect(() => {
+    const refresh = () => {
+      void fetchLeadStatuses()
+    }
+    window.addEventListener('lead-status-types-updated', refresh)
+    return () => window.removeEventListener('lead-status-types-updated', refresh)
+  }, [fetchLeadStatuses])
+
   useEffect(() => { fetchLeads() }, [fetchLeads])
   useEffect(() => { setSelectedRows(new Set()) }, [month, statusTab])
 
@@ -689,16 +753,13 @@ export function LeadsPage() {
     // Mes: GET /leads ya manda ?month= y el backend filtra; no re-filtrar por l.month
     // (evita ocultar filas si month del JSON y el criterio del API difieren).
 
-    // Status tab (comparación canónica de texto / mayúsculas)
+    // Status tab (flags / nombre canónico del catálogo)
+    const catalog = statusCatalog.length > 0 ? statusCatalog : null
     if (statusTab === 'Cerrados') {
-      result = result.filter(l => {
-        const c = canonicalLeadStatus(l.status)
-        return c === 'Cerrado' || c === 'Seña'
-      })
+      result = result.filter((l) => resolveLeadStatusFlags(l.status, catalog).counts_as_cierre)
     } else if (statusTab !== 'Todos') {
-      const tabMap: Record<string, string> = { 'No show': 'No show' }
-      const matchStatus = tabMap[statusTab] || statusTab
-      result = result.filter(l => canonicalLeadStatus(l.status) === matchStatus)
+      const matchStatus = statusTab
+      result = result.filter((l) => canonicalLeadStatus(l.status, catalog) === matchStatus)
     }
 
     // Search
@@ -743,7 +804,7 @@ export function LeadsPage() {
     })
 
     return result
-  }, [leads, statusTab, search, filters, sort])
+  }, [leads, statusTab, search, filters, sort, statusCatalog])
 
   // ── Grouping ──
   const grouped = useMemo(() => {
@@ -808,7 +869,7 @@ export function LeadsPage() {
       <div className="flex items-center justify-between mb-3">
         {/* Left: Status tabs */}
         <div className="flex items-center gap-1">
-          {STATUS_TABS.map(t => (
+          {statusTabs.map(t => (
             <button key={t} onClick={() => setStatusTab(t)}
               className={`px-3 py-1.5 text-[11px] font-medium rounded-full transition-all ${
                 statusTab === t
@@ -1678,7 +1739,18 @@ function LeadsTableCell({
     if (col.type === 'date') {
       if (!value) return <span className="text-[12px] text-[var(--text3)]">—</span>
       const shown = formatIsoDateToDdMmYyyy(String(value)) ?? String(value)
-      return <span className="text-[12px] font-mono-num text-[var(--text2)]">{shown}</span>
+      const followupAccent =
+        col.key === 'fecha_seguimiento_pago' &&
+        resolveLeadStatusFlags(lead.status, getLeadStatusCatalog()).requires_followup_date
+      return (
+        <span
+          className={`text-[12px] font-mono-num ${
+            followupAccent ? 'rounded px-1 text-[var(--amber)] bg-[var(--amber)]/10' : 'text-[var(--text2)]'
+          }`}
+        >
+          {shown}
+        </span>
+      )
     }
     if (col.type === 'number') {
       return (
@@ -1973,10 +2045,27 @@ function LeadsTableCell({
 
   // Date
   if (col.type === 'date') {
-    if (!value) return <span onClick={onStartEdit} className={`${cellClass} text-[var(--text3)]`}>—</span>
+    const followupAccent =
+      col.key === 'fecha_seguimiento_pago' &&
+      resolveLeadStatusFlags(lead.status, getLeadStatusCatalog()).requires_followup_date
+    if (!value) {
+      return (
+        <span
+          onClick={onStartEdit}
+          className={`${cellClass} ${followupAccent ? 'rounded px-1 text-[var(--amber)] bg-[var(--amber)]/10' : 'text-[var(--text3)]'}`}
+        >
+          —
+        </span>
+      )
+    }
     const dateStr = formatIsoDateToDdMmYyyy(String(value)) ?? String(value)
     return (
-      <span onClick={onStartEdit} className={`${cellClass} font-mono-num text-[var(--text2)]`}>
+      <span
+        onClick={onStartEdit}
+        className={`${cellClass} font-mono-num ${
+          followupAccent ? 'rounded px-1 text-[var(--amber)] bg-[var(--amber)]/10' : 'text-[var(--text2)]'
+        }`}
+      >
         {dateStr}
       </span>
     )

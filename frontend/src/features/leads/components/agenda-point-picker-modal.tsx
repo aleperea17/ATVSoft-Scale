@@ -342,8 +342,8 @@ export function AgendaPointPickerModal({
               onClick={() => void pickBio()}
               className="rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-4 py-6 text-left transition-colors hover:border-[var(--accent)] disabled:opacity-50"
             >
-              <div className="text-[13px] font-semibold text-[var(--text)]">Bio</div>
-              <div className="mt-1 text-[11px] text-[var(--text3)]">Guarda &quot;bio&quot; como referencia</div>
+              <div className="text-[13px] font-semibold text-[var(--text)]">Formulario</div>
+              <div className="mt-1 text-[11px] text-[var(--text3)]">Formulario externo / link en perfil</div>
             </button>
           </div>
           {hasAssignedPuntoAgenda && (

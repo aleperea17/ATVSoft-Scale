@@ -17,6 +17,7 @@ import {
   STATUS_OPTIONS,
   STATUS_TABS,
 } from '../types'
+import { resolveLeadStatusFlags } from '@/shared/lib/lead-status-flags'
 
 type SortConfig = { field: string; dir: 'asc' | 'desc' }
 
@@ -48,7 +49,7 @@ function canonicalHotLeadStatus(raw: string | null | undefined): string {
 
 function matchesStatusTab(item: HotLead, tab: string): boolean {
   const status = canonicalHotLeadStatus(item.status)
-  if (tab === 'Cerrados') return status === 'Cerrado' || status === 'Seña'
+  if (tab === 'Cerrados') return resolveLeadStatusFlags(status).counts_as_cierre
   if (tab === 'Todos') return true
   return status === tab
 }

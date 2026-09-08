@@ -46,7 +46,6 @@ const dataGroups: NavGroup[] = [
       { label: 'Reels', href: '/reels', children: [{ label: 'Métricas', href: '/metrica-reels' }, { label: 'Lead por reel', href: '/keywords' }] },
       { label: 'Historias', href: '/historias', children: [{ label: 'Métricas', href: '/metrica-historias' }] },
       { label: 'YouTube', href: '/youtube' },
-      { label: 'BIO', href: '/bio' },
     ],
   },
   {
@@ -76,6 +75,7 @@ const settingsGroup: NavGroup = {
     { label: 'Listas maestras', href: '/listas' },
     { label: 'Programas', href: '/programas' },
     { label: 'Avatares', href: '/avatares' },
+    { label: 'Estados', href: '/estados' },
     { label: 'Tasa de refresco', href: '/ajustes/tasa-refresco' },
     { label: 'Conexiones API', href: '/conexiones' },
   ],

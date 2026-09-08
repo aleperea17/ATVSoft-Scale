@@ -1,4 +1,8 @@
 import { apiFetch } from '@/lib/api'
+import {
+  resolveLeadStatusFlags,
+  type LeadStatusCatalogItem,
+} from '@/shared/lib/lead-status-flags'
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // TYPES
@@ -7,6 +11,17 @@ import { apiFetch } from '@/lib/api'
 export type LeadRow = Record<string, unknown> & {
   email?: string | null
   ingresos_rango?: string | null
+}
+
+let _statusCatalog: LeadStatusCatalogItem[] | null = null
+
+/** Inyectá el catálogo de estados (GET /lead-statuses) antes de calcular embudos. */
+export function setLeadStatusCatalog(catalog: LeadStatusCatalogItem[] | null | undefined) {
+  _statusCatalog = catalog && catalog.length > 0 ? catalog : null
+}
+
+export function getLeadStatusCatalog(): LeadStatusCatalogItem[] | null {
+  return _statusCatalog
 }
 
 export type LeadsFunnel = {
@@ -79,12 +94,12 @@ export function leadHasAgenda(l: LeadRow): boolean {
 }
 
 export function leadHasShow(l: LeadRow): boolean {
-  const st = String(l.status ?? '').trim().toLowerCase()
-  return leadHasAgenda(l) && st !== 'no show'
+  const flags = resolveLeadStatusFlags(String(l.status ?? ''), _statusCatalog)
+  return leadHasAgenda(l) && !flags.counts_as_no_show
 }
 
 export function leadIsCierre(l: LeadRow): boolean {
-  return String(l.status ?? '').trim().toLowerCase() === 'cerrado'
+  return resolveLeadStatusFlags(String(l.status ?? ''), _statusCatalog).counts_as_cierre
 }
 
 function textLooksLikeBioTraffic(s: string): boolean {
@@ -163,7 +178,9 @@ export function sortLeadsForFunnelStep(leads: LeadRow[], step: FunnelLeadStep): 
 
 export function calcFunnel(leads: LeadRow[], conversaciones?: number): LeadsFunnel {
   const agendas = leads.filter(leadHasAgenda).length
-  const noShows = leads.filter(l => String(l.status ?? '').trim().toLowerCase() === 'no show').length
+  const noShows = leads.filter(
+    (l) => resolveLeadStatusFlags(String(l.status ?? ''), _statusCatalog).counts_as_no_show,
+  ).length
   const shows = leads.filter(leadHasShow).length
   const cierres = leads.filter(leadIsCierre).length
   const ingresos = leads.reduce((s, l) => s + (Number(l.payment) || 0), 0)
@@ -243,6 +260,16 @@ export function monthRangeIso(month: string): { desde: string; hasta: string } |
 }
 
 export async function getLeadsAnalytics(month: string): Promise<{ leads: LeadRow[]; analytics: LeadsAnalytics; conversaciones: number }> {
+  try {
+    const stRes = await apiFetch('/lead-statuses')
+    if (stRes.ok) {
+      const stj = (await stRes.json().catch(() => ({}))) as { statuses?: LeadStatusCatalogItem[] }
+      if (Array.isArray(stj.statuses)) setLeadStatusCatalog(stj.statuses)
+    }
+  } catch {
+    /* catálogo default vía resolveLeadStatusFlags */
+  }
+
   const leads: LeadRow[] = []
   const setterReports: Record<string, unknown>[] = []
   const closerReports: Record<string, unknown>[] = []

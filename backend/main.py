@@ -24,6 +24,7 @@ from src.controllers.ghl_controller import router as ghl_router
 from src.controllers.master_lists_controller import router as master_lists_router
 from src.controllers.programs_controller import router as programs_router
 from src.controllers.avatars_controller import router as avatars_router
+from src.controllers.lead_statuses_controller import router as lead_statuses_router
 from src.controllers.keywords_controller import router as keywords_router
 from src.controllers.leads_controller import router as leads_router
 from src.controllers.hot_leads_controller import router as hot_leads_router
@@ -260,6 +261,7 @@ app.include_router(ghl_router)
 app.include_router(master_lists_router)
 app.include_router(programs_router)
 app.include_router(avatars_router)
+app.include_router(lead_statuses_router)
 app.include_router(leads_router)
 app.include_router(call_reports_router)
 app.include_router(hot_leads_router)

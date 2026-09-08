@@ -1,4 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk'
+import {
+  FALLBACK_DEFAULT_STATUS,
+  STATUS_OPTIONS,
+} from '@/shared/constants/lead-status-defaults'
 
 const anthropic = new Anthropic()
 
@@ -10,11 +14,13 @@ export type AnalysisResult = {
   status: string
 }
 
+const STATUS_LIST = STATUS_OPTIONS.map((s) => `"${s}"`).join(', ')
+
 const ANALYSIS_PROMPT = `Sos un analista de ventas experto. Analizá la siguiente transcripción de una llamada de ventas entre un closer y un lead.
 
 Los programas que se ofrecen son: "Boost", "Advantage", "Mentoria".
-Los estados posibles del lead son: "Cerrado", "Seña", "Seguimiento", "No show", "Descalificado", "Pendiente".
-Si el lead cerró, agregá el monto entre paréntesis. Ej: "Cerrado (1600usd)"
+Los estados posibles del lead son: ${STATUS_LIST}.
+Si el lead cerró, agregá el monto entre paréntesis. Ej: "Cerrado PIF (1600usd)"
 
 Extraé la siguiente información en español y generá la FICHA DE ANÁLISIS DE LLAMADA:
 
@@ -28,7 +34,7 @@ Extraé la siguiente información en español y generá la FICHA DE ANÁLISIS DE
 
 4. **PROGRAMA OFRECIDO** (program_offered): Exactamente uno de: "Boost", "Advantage", "Mentoria", o "" si no se mencionó.
 
-5. **STATUS** (status): Exactamente uno de: "Cerrado", "Seña", "Seguimiento", "Descalificado", "Pendiente".
+5. **STATUS** (status): Exactamente uno de: ${STATUS_LIST}.
 
 Respondé EXACTAMENTE en este formato JSON (sin markdown, sin backticks):
 {"closer_report": "...", "dolores_llamada": "...", "razon_compra": "...", "program_offered": "...", "status": "..."}
@@ -61,7 +67,7 @@ export async function analyzeTranscript(transcript: string): Promise<AnalysisRes
       dolores_llamada: parsed.dolores_llamada || '',
       razon_compra: parsed.razon_compra || '',
       program_offered: parsed.program_offered || '',
-      status: parsed.status || 'Pendiente',
+      status: parsed.status || FALLBACK_DEFAULT_STATUS,
     }
   } catch {
     return {
@@ -69,7 +75,7 @@ export async function analyzeTranscript(transcript: string): Promise<AnalysisRes
       dolores_llamada: '',
       razon_compra: '',
       program_offered: '',
-      status: 'Pendiente',
+      status: FALLBACK_DEFAULT_STATUS,
     }
   }
 }

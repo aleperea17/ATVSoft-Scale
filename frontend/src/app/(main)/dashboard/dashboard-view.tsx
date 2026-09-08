@@ -8,7 +8,13 @@ import { formatCash } from '@/shared/lib/format-utils'
 import { calendarPartsInTimeZone } from '@/shared/lib/company-timezone'
 import { apiFetch } from '@/lib/api'
 import { Line, Doughnut, Bar } from '@/shared/components/charts'
-import { calcFunnel, type LeadRow } from '@/features/leads/services/leads-analytics'
+import {
+  calcFunnel,
+  leadIsCierre,
+  setLeadStatusCatalog,
+  type LeadRow,
+} from '@/features/leads/services/leads-analytics'
+import type { LeadStatusCatalogItem } from '@/shared/lib/lead-status-flags'
 import type { DashContentRow, DashData } from './dashboard-data-types'
 
 // ── Custom Bar Chart ──
@@ -596,6 +602,11 @@ export default function DashboardPage() {
       fetchStoriesMetricsChats(prev, userId),
       fetchBioMetricsLeads(month, userId, apiBase),
       fetchBioMetricsLeads(prev, userId, apiBase),
+      apiFetch('/lead-statuses', dashUserHeaders(userId)).then(async (res) => {
+        if (!res.ok) return null
+        const j = (await res.json().catch(() => ({}))) as { statuses?: LeadStatusCatalogItem[] }
+        return Array.isArray(j.statuses) ? j.statuses : null
+      }),
     ])
     const currReelRows = settled[0].status === 'fulfilled' ? settled[0].value : []
     const prevReelRows = settled[1].status === 'fulfilled' ? settled[1].value : []
@@ -614,6 +625,9 @@ export default function DashboardPage() {
     const prevStoriesChatsMetrics = settled[14].status === 'fulfilled' ? settled[14].value : 0
     const bioChatsCount = settled[15].status === 'fulfilled' ? settled[15].value : 0
     const prevBioChatsCount = settled[16].status === 'fulfilled' ? settled[16].value : 0
+    const statusCatalog =
+      settled[17].status === 'fulfilled' ? settled[17].value : null
+    if (statusCatalog) setLeadStatusCatalog(statusCatalog)
     const currRows = [...currReelRows, ...currStoryRows, ...currYtRows]
     const prevRows = [...prevReelRows, ...prevStoryRows, ...prevYtRows]
     items = currRows as unknown as Record<string, unknown>[]
@@ -716,7 +730,7 @@ export default function DashboardPage() {
 
     // Program counts
     const progMap: Record<string, number> = {}
-    currLeads.filter(l => l.status === 'Cerrado' && l.program_offered).forEach(l => {
+    currLeads.filter(l => leadIsCierre(l) && l.program_offered).forEach(l => {
       const p = String(l.program_offered)
       progMap[p] = (progMap[p] || 0) + 1
     })

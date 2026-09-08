@@ -10,6 +10,11 @@ from pony.orm import db_session, flush
 from src.models import CloserReport, Lead, TeamMember
 from src.services.company_config_service import company_today
 from src.services.discord_service import DiscordServices
+from src.services.lead_statuses_services import (
+    default_lead_status_name,
+    status_counts_as_cierre,
+    status_counts_as_no_show,
+)
 
 discord_service = DiscordServices()
 
@@ -21,7 +26,9 @@ def _day_bounds(fecha: date) -> tuple[datetime, datetime]:
 
 
 def _lead_status(l: Lead) -> str:
-    return (l.status or l.estado or "Pendiente").strip().lower()
+    uid = int(l.user_id)
+    fallback = default_lead_status_name(uid)
+    return (l.status or l.estado or fallback).strip() or fallback
 
 
 def _lead_closer_name(l: Lead) -> str:
@@ -49,8 +56,14 @@ def leads_for_closer_on_date(user_id: int, fecha: date, closer_name: str) -> lis
 
 def aggregate_closer_metrics(leads: list[Lead]) -> dict[str, int | float]:
     llamadas = len(leads)
-    shows = sum(1 for lead in leads if _lead_status(lead) != "no show")
-    cierres = sum(1 for lead in leads if _lead_status(lead) == "cerrado")
+    shows = sum(
+        1
+        for lead in leads
+        if not status_counts_as_no_show(int(lead.user_id), _lead_status(lead))
+    )
+    cierres = sum(
+        1 for lead in leads if status_counts_as_cierre(int(lead.user_id), _lead_status(lead))
+    )
     calificados = sum(1 for lead in leads if _calificacion(lead) == "calificado")
     descalificados = sum(1 for lead in leads if _calificacion(lead) == "descalificado")
     ingreso = sum(float(lead.pago or 0) for lead in leads)

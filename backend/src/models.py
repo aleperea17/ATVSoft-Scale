@@ -152,6 +152,24 @@ class AvatarType(db.Entity):
     created_at = Required(datetime, default=lambda: datetime.utcnow())
 
 
+class LeadStatusType(db.Entity):
+    """Estados de Lead personalizables + roles de embudo (nombre visible ≠ lógica de negocio)."""
+
+    _table_ = "lead_status_type"
+
+    id = PrimaryKey(int, auto=True)
+    user_id = Required(int, index=True)
+    nombre = Required(str)
+    color = Required(str, default="#6B7280")
+    activo = Required(bool, default=True)
+    sort_order = Required(int, default=0)
+    counts_as_cierre = Required(bool, default=False)
+    counts_as_no_show = Required(bool, default=False)
+    requires_followup_date = Required(bool, default=False)
+    is_default = Required(bool, default=False)
+    created_at = Required(datetime, default=lambda: datetime.utcnow())
+
+
 class Lead(db.Entity):
     id = PrimaryKey(int, auto=True)
     user_id = Required(int, index=True)
@@ -198,6 +216,8 @@ class Lead(db.Entity):
     notas = Optional(str, default="")
     # Respuestas completas del formulario pre-agenda Calendly (Q&A)
     formulario = Optional(str, default="")
+    # Fecha de seguimiento de pago (UI resalta si el status tiene requires_followup_date)
+    fecha_seguimiento_pago = Optional(date)
     recordatorio_enviado = Optional(bool, default=False)
     created_at = Required(datetime, default=lambda: datetime.utcnow())
 

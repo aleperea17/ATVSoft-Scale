@@ -98,6 +98,43 @@ class AvatarTypePatchRequest(BaseModel):
     sort_order: int | None = None
 
 
+class LeadStatusTypeOut(BaseModel):
+    id: int
+    nombre: str
+    color: str
+    activo: bool
+    sort_order: int
+    counts_as_cierre: bool = False
+    counts_as_no_show: bool = False
+    requires_followup_date: bool = False
+    is_default: bool = False
+
+
+class LeadStatusTypesListResponse(BaseModel):
+    statuses: list[LeadStatusTypeOut] = Field(default_factory=list)
+
+
+class LeadStatusTypeCreateRequest(BaseModel):
+    nombre: str = ""
+    color: str = "#6B7280"
+    activo: bool = True
+    counts_as_cierre: bool = False
+    counts_as_no_show: bool = False
+    requires_followup_date: bool = False
+    is_default: bool = False
+
+
+class LeadStatusTypePatchRequest(BaseModel):
+    nombre: str | None = None
+    color: str | None = None
+    activo: bool | None = None
+    sort_order: int | None = None
+    counts_as_cierre: bool | None = None
+    counts_as_no_show: bool | None = None
+    requires_followup_date: bool | None = None
+    is_default: bool | None = None
+
+
 class ApiConnectionResponse(BaseModel):
     id: str
     user_id: str
@@ -455,7 +492,7 @@ class LeadOut(BaseModel):
     ig_handle: str | None = None
     phone: str | None = None
     avatar_type: str | None = None
-    status: str = "Pendiente"
+    status: str = "Pendiente de pago"
     origin: str | None = None
     entry_channel: str | None = None
     entry_funnel: str | None = None
@@ -513,6 +550,10 @@ class LeadOut(BaseModel):
     formulario: str | None = Field(
         default=None,
         description="Respuestas completas del formulario pre-agenda Calendly (columna formulario).",
+    )
+    fecha_seguimiento_pago: str | None = Field(
+        default=None,
+        description="YYYY-MM-DD seguimiento de pago (columna fecha_seguimiento_pago).",
     )
     compromiso: str | None = None
     urgencia: str | None = None
@@ -588,6 +629,10 @@ class LeadPatchRequest(BaseModel):
         default=None,
         description='"" | "calificado" | "descalificado" — panel diario.',
     )
+    fecha_seguimiento_pago: str | None = Field(
+        default=None,
+        description="YYYY-MM-DD o vacío para limpiar.",
+    )
 
 
 class ManualCallCreateRequest(BaseModel):
@@ -622,7 +667,7 @@ class LeadCreateRequest(BaseModel):
         default=None,
         description="Normalizado como `via` (por defecto texto Manual).",
     )
-    status: str | None = Field(default="Pendiente")
+    status: str | None = Field(default="Pendiente de pago")
 
 
 class KeywordClientRow(BaseModel):

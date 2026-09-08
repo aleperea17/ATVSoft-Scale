@@ -7,6 +7,7 @@ import { backendAuthHeaders } from '@/lib/api'
 import { formatK, formatCash, formatIntegerEsAr } from '@/shared/lib/format-utils'
 import { monthKeyInCompanyTz } from '@/shared/lib/company-timezone'
 import { useCompanyTimezone } from '@/shared/components/app-providers'
+import { resolveLeadStatusFlags } from '@/shared/lib/lead-status-flags'
 
 type PerfSnapshot = { date: string; views: number; likes: number; comments: number }
 type VideoMetrics = {
@@ -664,7 +665,7 @@ function VideoCard({ video: v, isExpanded, onToggle, onUpdate, onSaveCashManual,
   const comentarios = Number(v.metrics?.comments) || 0
   const agendasMetric = typeof v.agendas === 'number' ? v.agendas : relatedAgenda.length
   const buyers = relatedAgenda.filter(
-    (l) => l.status === 'Cerrado' || (Number(l.payment) || 0) > 0,
+    (l) => resolveLeadStatusFlags(l.status).counts_as_cierre || (Number(l.payment) || 0) > 0,
   )
 
   if (isExpanded) return (
@@ -781,7 +782,7 @@ function VideoCard({ video: v, isExpanded, onToggle, onUpdate, onSaveCashManual,
               {relatedAgenda.slice(0, 6).map((l, i) => (
                 <div key={i} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg4)] px-3 py-2 text-[11px]">
                   <span className="truncate text-[var(--text2)]">{l.client_name || 'Sin nombre'}</span>
-                  <span className={l.status === 'Cerrado' ? 'font-semibold text-[var(--green)]' : 'text-[var(--text3)]'}>{l.status}</span>
+                  <span className={resolveLeadStatusFlags(l.status).counts_as_cierre ? 'font-semibold text-[var(--green)]' : 'text-[var(--text3)]'}>{l.status}</span>
                 </div>
               ))}
             </div>

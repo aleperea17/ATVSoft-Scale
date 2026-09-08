@@ -8,6 +8,7 @@ import { useToast } from '@/shared/components/toast'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
 import { getMonthRange, formatCash } from '@/shared/lib/format-utils'
 import { todayIsoInCompanyTz } from '@/shared/lib/company-timezone'
+import { resolveLeadStatusFlags } from '@/shared/lib/lead-status-flags'
 
 type ContentType = 'reel' | 'historia' | 'story' | 'video'
 
@@ -158,7 +159,9 @@ export function ContentPage({ contentType, platform, title, columns }: ContentPa
   // Attribution stats
   const allAttributedLeads = Array.from(leadsMap.values()).flat()
   const totalLeads = allAttributedLeads.length
-  const closedLeads = allAttributedLeads.filter(l => l.status === 'Cerrado')
+  const closedLeads = allAttributedLeads.filter((l) =>
+    resolveLeadStatusFlags(l.status).counts_as_cierre,
+  )
   const totalVentas = closedLeads.reduce((s, l) => s + (Number(l.payment) || 0), 0)
 
   const gridCols = `2fr ${columns.map(() => '1fr').join(' ')} 80px 80px 55px 75px 30px`
@@ -232,7 +235,9 @@ export function ContentPage({ contentType, platform, title, columns }: ContentPa
           {/* Rows */}
           {items.map((item) => {
             const itemLeads = leadsMap.get(item.id) || []
-            const itemCerrados = itemLeads.filter(l => l.status === 'Cerrado')
+            const itemCerrados = itemLeads.filter((l) =>
+              resolveLeadStatusFlags(l.status).counts_as_cierre,
+            )
             const itemVentas = itemCerrados.reduce((s, l) => s + (Number(l.payment) || 0), 0)
 
             return (
@@ -264,18 +269,21 @@ export function ContentPage({ contentType, platform, title, columns }: ContentPa
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 w-56">
                       <div className="rounded-lg border border-[var(--border2)] bg-[var(--bg2)] p-3 shadow-xl">
                         <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)] mb-2">Leads vinculados</div>
-                        {itemLeads.map((l, i) => (
+                        {itemLeads.map((l, i) => {
+                          const isCierre = resolveLeadStatusFlags(l.status).counts_as_cierre
+                          return (
                           <div key={i} className="flex items-center justify-between gap-2 py-1 text-[11px]">
                             <span className="truncate text-[var(--text2)]">{l.client_name}</span>
                             <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
                               style={{
-                                backgroundColor: l.status === 'Cerrado' ? '#4ADE8018' : l.status === 'Seguimiento' ? '#60A5FA18' : '#94A3B818',
-                                color: l.status === 'Cerrado' ? '#4ADE80' : l.status === 'Seguimiento' ? '#60A5FA' : '#94A3B8',
+                                backgroundColor: isCierre ? '#4ADE8018' : '#94A3B818',
+                                color: isCierre ? '#4ADE80' : '#94A3B8',
                               }}>
                               {l.status}
                             </span>
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                   )}

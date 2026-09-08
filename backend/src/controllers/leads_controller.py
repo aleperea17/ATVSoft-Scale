@@ -25,6 +25,7 @@ from src.services.programs_services import (
     build_program_norm_price_map,
     program_price_usd_for_prog_raw,
 )
+from src.services.lead_statuses_services import default_lead_status_name
 from src.services.call_report_service import (
     analyze_call_report,
     get_or_create_report,
@@ -212,8 +213,26 @@ def _parse_dt_in(val: str | None) -> datetime | None:
         return None
 
 
-def _to_lead_out(row: LeadEntity, norm_prices: dict[str, float] | None = None) -> LeadOut:
-    st = (row.status or row.estado or "").strip() or "Pendiente"
+def _parse_date_only(val: object | None) -> date | None:
+    if val is None:
+        return None
+    s = str(val).strip()
+    if not s:
+        return None
+    try:
+        return date.fromisoformat(s[:10])
+    except ValueError:
+        return None
+
+
+def _to_lead_out(
+    row: LeadEntity,
+    norm_prices: dict[str, float] | None = None,
+    default_st: str | None = None,
+) -> LeadOut:
+    if not default_st:
+        default_st = default_lead_status_name(int(row.user_id))
+    st = (row.status or row.estado or "").strip() or default_st
     created = row.created_at
     if created is not None and created.tzinfo is not None:
         created = created.replace(tzinfo=None)
@@ -224,6 +243,8 @@ def _to_lead_out(row: LeadEntity, norm_prices: dict[str, float] | None = None) -
     ing = float(row.ingresos_lead or 0)
     kw = row.keyword
     price_catalog = program_price_usd_for_prog_raw(norm_prices or {}, row.programa_ofrecido)
+    fsp = getattr(row, "fecha_seguimiento_pago", None)
+    fsp_s = fsp.isoformat() if isinstance(fsp, date) else None
     return LeadOut(
         id=str(row.id),
         lead_user_id=str(row.user_id),
@@ -266,6 +287,7 @@ def _to_lead_out(row: LeadEntity, norm_prices: dict[str, float] | None = None) -
         ingresos_mensuales=ing,
         ingresos_rango=(row.ingresos_rango or "").strip() or None,
         formulario=(row.formulario or "").strip() or None,
+        fecha_seguimiento_pago=fsp_s,
         compromiso=None,
         urgencia=None,
         disposicion_invertir=None,
@@ -325,7 +347,8 @@ def list_leads(
             ]
 
         rows.sort(key=_lead_sort_ts, reverse=False)
-        out = [_to_lead_out(r, norm_prices) for r in rows]
+        default_st = default_lead_status_name(uid)
+        out = [_to_lead_out(r, norm_prices, default_st) for r in rows]
 
     return LeadsListResponse(leads=out)
 
@@ -359,7 +382,7 @@ def create_lead(
 
     y, mn = _operative_month_for_create(body.month)
     anchor = _anchor_datetime_for_operative_month(y, mn)
-    st = (body.status or "").strip() or "Pendiente"
+    st = (body.status or "").strip() or default_lead_status_name(uid)
 
     with db_session:
         via = _normalize_via_value(uid, (body.entry_channel or "").strip() or "Manual")
@@ -418,14 +441,15 @@ def create_manual_call(
     anchor = datetime(target_date.year, target_date.month, 15, 15, 0, 0)
 
     with db_session:
+        default_st = default_lead_status_name(uid)
         row = LeadEntity(
             user_id=uid,
             nombre=(body.client_name or "").strip(),
             ig=(body.ig_handle or "").strip(),
             origen="Manual",
             via=_normalize_via_value(uid, "Panel diario"),
-            status="Pendiente",
-            estado="Pendiente",
+            status=default_st,
+            estado=default_st,
             closer=(body.closer or "").strip(),
             fecha_bot=anchor,
             agendo=now_local,
@@ -603,7 +627,7 @@ def patch_lead(
         if "avatar_type" in data:
             row.avatar = data["avatar_type"] or ""
         if "status" in data:
-            st = (data["status"] or "").strip() or "Pendiente"
+            st = (data["status"] or "").strip() or default_lead_status_name(uid)
             row.status = st
             row.estado = st
         if "origen" in data:
@@ -679,6 +703,15 @@ def patch_lead(
             row.closer = (str(data["closer"]).strip() if data["closer"] is not None else "") or ""
         if "calificacion_llamada" in data:
             row.calificacion_llamada = _normalize_calificacion_llamada(data["calificacion_llamada"])
+        if "fecha_seguimiento_pago" in data:
+            raw_fsp = data["fecha_seguimiento_pago"]
+            if raw_fsp is None or (isinstance(raw_fsp, str) and not raw_fsp.strip()):
+                row.fecha_seguimiento_pago = None
+            else:
+                parsed_fsp = _parse_date_only(raw_fsp)
+                if parsed_fsp is None:
+                    raise HTTPException(status_code=400, detail="fecha_seguimiento_pago inválida (YYYY-MM-DD).")
+                row.fecha_seguimiento_pago = parsed_fsp
 
         _sync_dias_para_agendar(row)
 

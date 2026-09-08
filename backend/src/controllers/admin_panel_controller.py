@@ -24,6 +24,7 @@ from src.services.admin_panel_service import (
 )
 from src.services.agent_closer_service import list_llamadas_dia
 from src.services.company_config_service import company_now
+from src.services.lead_statuses_services import default_lead_status_name
 from src.services.programs_services import build_program_norm_price_map
 
 router = APIRouter(prefix="/api/admin/panel", tags=["admin-panel"], redirect_slashes=False)
@@ -103,14 +104,15 @@ def admin_panel_manual_call(
     anchor = datetime(body.fecha.year, body.fecha.month, 15, 15, 0, 0)
 
     with db_session:
+        default_st = default_lead_status_name(uid)
         row = LeadEntity(
             user_id=uid,
             nombre=(body.client_name or "").strip(),
             ig=(body.ig_handle or "").strip(),
             origen="Manual",
             via=_normalize_via_value(uid, "Panel corrección"),
-            status="Pendiente",
-            estado="Pendiente",
+            status=default_st,
+            estado=default_st,
             closer=(body.closer or "").strip(),
             fecha_bot=anchor,
             agendo=now_local,

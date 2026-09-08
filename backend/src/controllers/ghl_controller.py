@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from src.lead_display_utils import compute_dias_para_agendar
 from src.models import ApiConnection, Lead
+from src.services.lead_statuses_services import booking_lead_status_name
 
 router = APIRouter(prefix="/ghl", tags=["ghl"], redirect_slashes=False)
 
@@ -249,7 +250,9 @@ def _apply_appointment_to_lead(
             row.call = call_at
         if agendo_at is not None:
             row.agendo = agendo_at
-        row.status = "Agendado"
+        booking = booking_lead_status_name(user_id)
+        row.status = booking
+        row.estado = booking
         row.agendo_en = "GHL"
         row.dias_para_agendar = compute_dias_para_agendar(row.primer_contacto, row.agendo)
         return "updated"
@@ -260,6 +263,7 @@ def _apply_appointment_to_lead(
         notas_parts.append(f"GHL contact_id: {ghl_contact_id}")
 
     now = datetime.utcnow()
+    booking = booking_lead_status_name(user_id)
     Lead(
         user_id=user_id,
         nombre=display_name,
@@ -270,7 +274,8 @@ def _apply_appointment_to_lead(
         primer_contacto=agendo_at or now,
         call=call_at,
         agendo=agendo_at or call_at,
-        status="Agendado",
+        status=booking,
+        estado=booking,
         agendo_en="GHL",
         dias_para_agendar=compute_dias_para_agendar(agendo_at or now, agendo_at or now),
     )

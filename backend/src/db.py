@@ -1362,6 +1362,95 @@ def _migrate_postgres_lead_formulario() -> None:
         conn.close()
 
 
+def _migrate_postgres_lead_status_type() -> None:
+    """Crea `lead_status_type` en Postgres."""
+    if (config("DB_PROVIDER", default="") or "").strip().lower() != "postgres":
+        return
+    try:
+        import psycopg2
+    except ImportError:
+        return
+    try:
+        conn = psycopg2.connect(
+            user=config("DB_USER"),
+            password=config("DB_PASS"),
+            host=config("DB_HOST"),
+            dbname=config("DB_NAME"),
+        )
+    except Exception:
+        return
+    try:
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS lead_status_type (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        nombre TEXT NOT NULL,
+                        color TEXT NOT NULL DEFAULT '#6B7280',
+                        activo BOOLEAN NOT NULL DEFAULT TRUE,
+                        sort_order INTEGER NOT NULL DEFAULT 0,
+                        counts_as_cierre BOOLEAN NOT NULL DEFAULT FALSE,
+                        counts_as_no_show BOOLEAN NOT NULL DEFAULT FALSE,
+                        requires_followup_date BOOLEAN NOT NULL DEFAULT FALSE,
+                        is_default BOOLEAN NOT NULL DEFAULT FALSE,
+                        created_at TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'utc')
+                    )
+                    """
+                )
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_lead_status_type_user_id ON lead_status_type (user_id)"
+                )
+            except Exception:
+                pass
+    finally:
+        conn.close()
+
+
+def _migrate_postgres_lead_fecha_seguimiento_pago() -> None:
+    """Columna fecha_seguimiento_pago en Lead."""
+    if (config("DB_PROVIDER", default="") or "").strip().lower() != "postgres":
+        return
+    try:
+        import psycopg2
+    except ImportError:
+        return
+    try:
+        conn = psycopg2.connect(
+            user=config("DB_USER"),
+            password=config("DB_PASS"),
+            host=config("DB_HOST"),
+            dbname=config("DB_NAME"),
+        )
+    except Exception:
+        return
+    try:
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT table_name FROM information_schema.tables
+                WHERE table_schema = 'public' AND lower(table_name) = 'lead'
+                """
+            )
+            tr = cur.fetchone()
+            if not tr:
+                return
+            physical = tr[0]
+            sql_table = f'"{physical}"' if physical != physical.lower() else physical
+            try:
+                cur.execute(
+                    f"ALTER TABLE {sql_table} ADD COLUMN IF NOT EXISTS "
+                    f"fecha_seguimiento_pago DATE"
+                )
+            except Exception:
+                pass
+    finally:
+        conn.close()
+
+
 def _migrate_postgres_drop_company_config() -> None:
     """Scale opera en Europe/Madrid fijo: ya no hay tabla de config de TZ."""
     if (config("DB_PROVIDER", default="") or "").strip().lower() != "postgres":
@@ -1407,6 +1496,7 @@ def init_db() -> None:
     _migrate_postgres_remove_closer_marketing()
     _migrate_postgres_offered_program()
     _migrate_postgres_avatar_type()
+    _migrate_postgres_lead_status_type()
     _migrate_postgres_seguimiento_report()
     _migrate_postgres_hot_lead()
     _migrate_postgres_lead_calendly_fields()
@@ -1414,6 +1504,7 @@ def init_db() -> None:
     _migrate_postgres_lead_calificacion_llamada()
     _migrate_postgres_weekly_report_feedback_marketing()
     _migrate_postgres_lead_formulario()
+    _migrate_postgres_lead_fecha_seguimiento_pago()
     _migrate_postgres_drop_company_config()
     db.generate_mapping(create_tables=True)
     _migrate_agendo_en_iso_to_call()

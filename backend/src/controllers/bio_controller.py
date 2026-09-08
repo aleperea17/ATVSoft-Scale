@@ -9,6 +9,7 @@ from pony.orm import ObjectNotFound, db_session
 from src.models import ApiConnection, Lead as LeadEntity
 from src.schemas import BioLeadResponse, BioLeadStatusPatchRequest, BioLeadsListResponse, BioMetricsResponse, BioViaOptionsResponse
 from src.services.company_config_service import company_today
+from src.services.lead_statuses_services import status_counts_as_cierre
 
 router = APIRouter(prefix="/api/bio", tags=["bio"], redirect_slashes=False)
 
@@ -87,8 +88,7 @@ def _dt_iso(dt: datetime | None) -> str | None:
 
 
 def _is_cerrado(row: LeadEntity) -> bool:
-    s = (row.status or row.estado or "").strip().lower()
-    return s == "cerrado"
+    return status_counts_as_cierre(int(row.user_id), row.status or row.estado)
 
 
 def _lead_keyword_tokens(raw: str | None) -> list[str]:

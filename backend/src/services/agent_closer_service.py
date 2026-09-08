@@ -47,7 +47,10 @@ def list_llamadas_dia(user_id: int, fecha: date) -> dict:
 
 
 def _llamada_item(l: Lead) -> dict:
-    status = (l.status or l.estado or "Pendiente").strip() or "Pendiente"
+    from src.services.lead_statuses_services import default_lead_status_name
+
+    fallback = default_lead_status_name(int(l.user_id))
+    status = (l.status or l.estado or fallback).strip() or fallback
     return {
         "id": int(l.id),
         "hora": _fmt_hora(l.call),

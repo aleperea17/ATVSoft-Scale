@@ -22,6 +22,7 @@ from src.controllers.webhook_controller import (
 )
 from src.lead_display_utils import compute_dias_para_agendar
 from src.models import ApiConnection, Lead
+from src.services.lead_statuses_services import booking_lead_status_name
 
 router = APIRouter(prefix="/calendly", tags=["calendly"], redirect_slashes=False)
 
@@ -393,7 +394,9 @@ def _apply_invitee_to_lead(
             row.call = call_at
         if agendo_at is not None:
             row.agendo = agendo_at
-        row.status = "Agendado"
+        booking = booking_lead_status_name(user_id)
+        row.status = booking
+        row.estado = booking
         row.agendo_en = "Calendly"
         _apply_calendly_form_fields(row, fields)
         row.dias_para_agendar = compute_dias_para_agendar(row.primer_contacto, row.agendo)
@@ -405,6 +408,7 @@ def _apply_invitee_to_lead(
     if call_at is not None:
         notas_parts.append(f"Cita: {call_at.isoformat()}")
 
+    booking = booking_lead_status_name(user_id)
     row = Lead(
         user_id=user_id,
         nombre=display_name,
@@ -412,7 +416,8 @@ def _apply_invitee_to_lead(
         notas="\n".join(notas_parts),
         call=call_at,
         agendo=agendo_at or call_at,
-        status="Agendado",
+        status=booking,
+        estado=booking,
         agendo_en="Calendly",
     )
     _apply_calendly_form_fields(row, fields)
