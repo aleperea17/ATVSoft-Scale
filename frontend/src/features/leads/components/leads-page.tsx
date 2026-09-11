@@ -9,6 +9,7 @@ import { useAuthUser } from '@/shared/hooks/use-auth-user'
 import { formatCash } from '@/shared/lib/format-utils'
 import { apiFetch, backendAuthHeaders, formatApiDetail } from '@/lib/api'
 import { AgendaPointPickerModal } from './agenda-point-picker-modal'
+import { agendaSimpleAnchorBadge } from '@/shared/constants/agenda-simple-anchors'
 import {
   Lead,
   ColumnDef,
@@ -61,7 +62,8 @@ function formatAgendaPointBadgeText(
 ): string {
   const k = String(raw || '').trim()
   if (!k) return ''
-  if (k.toLowerCase() === 'bio') return '[Formulario]'
+  const simpleBadge = agendaSimpleAnchorBadge(k)
+  if (simpleBadge) return simpleBadge
   const yt = /^youtube:(\d+)$/i.exec(k)
   if (yt) {
     const id = yt[1]

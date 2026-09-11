@@ -38,15 +38,24 @@ router = APIRouter(prefix="/api/leads", tags=["leads"], redirect_slashes=False)
 _STORY_AGENDA_PREFIX = "story:"
 _YOUTUBE_AGENDA_PREFIX = "youtube:"
 
+# Tokens fijos de punto_agenda (sin ID de contenido). Futuro: mapear a canales de métricas.
+_SIMPLE_AGENDA_ANCHORS = frozenset(
+    {
+        "bio",
+        "bienvenida_instagram",
+        "post_fijado_instagram",
+    }
+)
+
 
 def _normalize_channel_anchor_value(user_id_int: int, raw: str | None) -> str:
-    """Valor canónico para `punto_agenda` o `via`: bio, reel id, story:<id>, youtube:<id>, texto libre."""
+    """Valor canónico para `punto_agenda` o `via`: bio, reel id, story:<id>, youtube:<id>, anclas simples, texto libre."""
     s = (str(raw) if raw is not None else "").strip()
     if not s:
         return ""
     low = s.casefold()
-    if low == "bio":
-        return "bio"
+    if low in _SIMPLE_AGENDA_ANCHORS:
+        return low
     if low.startswith(_STORY_AGENDA_PREFIX):
         rest = s[len(_STORY_AGENDA_PREFIX) :].strip()
         try:
@@ -108,7 +117,7 @@ def _normalize_channel_anchor_value(user_id_int: int, raw: str | None) -> str:
 
 
 def _normalize_punto_agenda_value(user_id_int: int, raw: str | None) -> str:
-    """Normaliza `punto_agenda`: reel, historia, youtube, bio, u otro texto."""
+    """Normaliza `punto_agenda`: reel, historia, youtube, anclas simples (bio / bienvenida / post fijado), u otro texto."""
     return _normalize_channel_anchor_value(user_id_int, raw)
 
 

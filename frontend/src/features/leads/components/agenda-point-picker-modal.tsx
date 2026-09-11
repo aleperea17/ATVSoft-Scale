@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { apiFetch } from '@/lib/api'
 import { Modal } from '@/shared/components/modal'
+import { AGENDA_SIMPLE_ANCHORS } from '@/shared/constants/agenda-simple-anchors'
 
 export type AgendaPickerStep = 'menu' | 'reel' | 'historia' | 'youtube'
 
@@ -210,7 +211,17 @@ export function AgendaPointPickerModal({
   const pickBio = async () => {
     setSaving(true)
     try {
-      await onSavePuntoAgenda('bio')
+      await onSavePuntoAgenda(AGENDA_SIMPLE_ANCHORS.bio.value)
+      onClose()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const pickSimpleAnchor = async (value: string) => {
+    setSaving(true)
+    try {
+      await onSavePuntoAgenda(value)
       onClose()
     } finally {
       setSaving(false)
@@ -305,7 +316,7 @@ export function AgendaPointPickerModal({
       {step === 'menu' && (
         <div className="space-y-4">
           <p className="text-[12px] text-[var(--text3)]">Elegí a qué pieza enlaza este lead.</p>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <button
               type="button"
               disabled={saving}
@@ -342,8 +353,34 @@ export function AgendaPointPickerModal({
               onClick={() => void pickBio()}
               className="rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-4 py-6 text-left transition-colors hover:border-[var(--accent)] disabled:opacity-50"
             >
-              <div className="text-[13px] font-semibold text-[var(--text)]">Formulario</div>
-              <div className="mt-1 text-[11px] text-[var(--text3)]">Formulario externo / link en perfil</div>
+              <div className="text-[13px] font-semibold text-[var(--text)]">{AGENDA_SIMPLE_ANCHORS.bio.label}</div>
+              <div className="mt-1 text-[11px] text-[var(--text3)]">{AGENDA_SIMPLE_ANCHORS.bio.hint}</div>
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void pickSimpleAnchor(AGENDA_SIMPLE_ANCHORS.bienvenida_instagram.value)}
+              className="rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-4 py-6 text-left transition-colors hover:border-[var(--accent)] disabled:opacity-50"
+            >
+              <div className="text-[13px] font-semibold text-[var(--text)]">
+                {AGENDA_SIMPLE_ANCHORS.bienvenida_instagram.label}
+              </div>
+              <div className="mt-1 text-[11px] text-[var(--text3)]">
+                {AGENDA_SIMPLE_ANCHORS.bienvenida_instagram.hint}
+              </div>
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void pickSimpleAnchor(AGENDA_SIMPLE_ANCHORS.post_fijado_instagram.value)}
+              className="rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-4 py-6 text-left transition-colors hover:border-[var(--accent)] disabled:opacity-50"
+            >
+              <div className="text-[13px] font-semibold text-[var(--text)]">
+                {AGENDA_SIMPLE_ANCHORS.post_fijado_instagram.label}
+              </div>
+              <div className="mt-1 text-[11px] text-[var(--text3)]">
+                {AGENDA_SIMPLE_ANCHORS.post_fijado_instagram.hint}
+              </div>
             </button>
           </div>
           {hasAssignedPuntoAgenda && (
