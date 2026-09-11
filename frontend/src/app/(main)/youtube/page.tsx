@@ -328,7 +328,9 @@ export default function YouTubePage() {
       const res = await fetch(`${apiBase}/api/youtube/videos/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...backendAuthHeaders() },
-        body: JSON.stringify({ cash_manual: Math.max(0, Math.round(cashManual)) }),
+        body: JSON.stringify({
+          cash_manual: Math.max(0, Number.isFinite(cashManual) ? cashManual : 0),
+        }),
       })
       const data = (await res.json().catch(() => ({}))) as Video & { detail?: string }
       if (!res.ok) {
@@ -717,9 +719,18 @@ function VideoCard({ video: v, isExpanded, onToggle, onUpdate, onSaveCashManual,
             <div className="text-[8px] font-medium uppercase tracking-wider text-[var(--text3)]">Cash manual</div>
             <input
               type="number"
+              step="0.01"
+              min={0}
+              inputMode="decimal"
               value={cashManual}
-              onChange={(e) => onUpdate(v.id, 'cash_manual', Number(e.target.value) || 0)}
-              onBlur={(e) => void onSaveCashManual(v.id, Number(e.target.value) || 0)}
+              onChange={(e) => {
+                const n = Number(String(e.target.value).replace(',', '.'))
+                onUpdate(v.id, 'cash_manual', Number.isFinite(n) ? n : 0)
+              }}
+              onBlur={(e) => {
+                const n = Number(String(e.target.value).replace(',', '.'))
+                void onSaveCashManual(v.id, Number.isFinite(n) ? n : 0)
+              }}
               className="w-full bg-transparent text-center font-mono-num text-[17px] font-bold text-[var(--green)] outline-none tabular-nums"
               onClick={(e) => e.stopPropagation()}
             />

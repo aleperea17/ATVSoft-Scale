@@ -338,6 +338,9 @@ export function DailyReportSection({ role }: Props) {
         <label className={`mb-1.5 block leading-snug ${labelClass}`}>{label}</label>
         <input
           type="number"
+          step={isCurrency ? '0.01' : '1'}
+          inputMode={isCurrency ? 'decimal' : undefined}
+          min={isCurrency ? 0 : undefined}
           value={displayValue}
           onChange={(e) => {
             const raw = e.target.value
@@ -347,7 +350,12 @@ export function DailyReportSection({ role }: Props) {
             }
             setForm((f) => ({
               ...f,
-              [key]: isCurrency ? parseFloat(raw) || 0 : parseInt(raw, 10) || 0,
+              [key]: isCurrency
+                ? (() => {
+                    const n = parseFloat(String(raw).replace(',', '.'))
+                    return Number.isFinite(n) ? n : 0
+                  })()
+                : parseInt(raw, 10) || 0,
             }))
           }}
           placeholder="0"

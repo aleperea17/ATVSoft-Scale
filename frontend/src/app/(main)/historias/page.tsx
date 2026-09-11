@@ -509,7 +509,10 @@ export default function HistoriasPage() {
     const angulo = overrides?.angulo ?? formAngulos[0] ?? sec.angulo ?? ''
     const ctaText = overrides?.cta_text ?? form.cta ?? sec.cta_text ?? ''
     const cashGenerado =
-      overrides?.cash_generado ?? (Number(form.cash) || sec.cash_manual || 0)
+      overrides?.cash_generado ?? (() => {
+        const n = Number(String(form.cash ?? '').replace(',', '.'))
+        return Number.isFinite(n) ? n : 0
+      })() || sec.cash_manual || 0
     const chats = overrides?.chats ?? (Number(form.chats) || sec.chats || 0)
     const res = await apiFetch(`/stories/sequences/${sec.id}`, {
       method: 'PUT',
@@ -1230,8 +1233,14 @@ function StorySequenceDetail({
             </div>
             <input
               type="number"
+              step="0.01"
+              min={0}
+              inputMode="decimal"
               value={cash}
-              onChange={(e) => setCash(Number(e.target.value) || 0)}
+              onChange={(e) => {
+                const n = Number(String(e.target.value).replace(',', '.'))
+                setCash(Number.isFinite(n) ? n : 0)
+              }}
               className="mt-2 w-full rounded-md border border-[var(--border2)] bg-[var(--bg3)] px-2 py-1.5 text-center font-mono-num text-[13px] text-[var(--text)] outline-none"
               aria-label="Ajuste opcional de cash en base de datos"
             />

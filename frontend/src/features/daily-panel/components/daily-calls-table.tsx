@@ -247,7 +247,8 @@ function CurrencyCell({
   const isOwed = variant === 'owed'
 
   const commit = async (raw: string) => {
-    const next = Math.max(0, Number(raw) || 0)
+    const parsed = Number(String(raw).trim().replace(',', '.'))
+    const next = Math.max(0, Number.isFinite(parsed) ? parsed : 0)
     if (next === num) {
       setEditing(false)
       return
@@ -269,7 +270,8 @@ function CurrencyCell({
         autoFocus
         type="number"
         min={0}
-        step={1}
+        step="0.01"
+        inputMode="decimal"
         defaultValue={num || ''}
         disabled={saving}
         placeholder="0"

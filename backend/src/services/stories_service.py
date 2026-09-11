@@ -204,9 +204,6 @@ def _serialize_sequence(sequence: StorySequence, user_id: str) -> dict[str, Any]
     cash_leads_f = _sum_pago_agenda_for_sequence(uid, sid)
     cash_manual_f = float(sequence.cash or 0)
     cash_total_f = cash_manual_f + cash_leads_f
-    cash_manual_i = int(round(cash_manual_f))
-    cash_leads_i = int(round(cash_leads_f))
-    cash_generado_i = int(round(cash_total_f))
     return {
         "id": sequence.id,
         "sequence_date": sequence.sequence_date.isoformat(),
@@ -214,9 +211,9 @@ def _serialize_sequence(sequence: StorySequence, user_id: str) -> dict[str, Any]
         "dolor": sequence.dolor,
         "angulo": sequence.angulo,
         "cta_text": sequence.cta,
-        "cash_generado": cash_generado_i,
-        "cash_manual": cash_manual_i,
-        "cash_leads": cash_leads_i,
+        "cash_generado": float(cash_total_f),
+        "cash_manual": float(cash_manual_f),
+        "cash_leads": float(cash_leads_f),
         "agendas": agendas_n,
         "has_cta": _has_cta(sequence),
         "chats": sum(int(s.replies or 0) for s in sequence.slides),
@@ -569,7 +566,7 @@ class StoriesService:
             dolor=(data.dolor or "").strip(),
             angulo=(data.angulo or "").strip(),
             cta=(data.cta_text or "").strip(),
-            cash=float(max(0, int(data.cash_generado or 0))),
+            cash=float(max(0.0, float(data.cash_generado or 0))),
             has_cta=bool(data.has_cta),
             chats=max(0, int(data.chats or 0)),
         )
@@ -599,7 +596,7 @@ class StoriesService:
         if "cta_text" in data:
             sequence.cta = str(data.get("cta_text") or "").strip()
         if "cash_generado" in data and data["cash_generado"] is not None:
-            sequence.cash = float(max(0, int(data["cash_generado"])))
+            sequence.cash = float(max(0.0, float(data["cash_generado"])))
         if "has_cta" in data and data["has_cta"] is not None:
             sequence.has_cta = bool(data["has_cta"])
         if "chats" in data and data["chats"] is not None:
@@ -637,7 +634,7 @@ class StoriesService:
         if "cta" in data and data["cta"] is not None:
             sequence.has_cta = bool(data["cta"])
         if "cash_manual" in data and data["cash_manual"] is not None:
-            sequence.cash = float(max(0, int(data["cash_manual"])))
+            sequence.cash = float(max(0.0, float(data["cash_manual"])))
         if "chats" in data and data["chats"] is not None:
             sequence.chats = max(0, int(data["chats"]))
 

@@ -91,7 +91,7 @@ def _historias_block(user_id: int, month: str) -> dict[str, Any]:
     metrics = stories_svc.get_metrics(uid_str, month)
     sequences = stories_svc.get_sequences(uid_str, month)
 
-    cash_total = sum(int(seq.get("cash_generado") or 0) for seq in sequences)
+    cash_total = sum(float(seq.get("cash_generado") or 0) for seq in sequences)
     secuencias = len(sequences)
 
     return {

@@ -15,8 +15,29 @@ export function formatIsoDateDdMmYyyy(iso: string): string {
   return `${m[3]}-${m[2]}-${m[1]}`
 }
 
+/** Montos de dinero: siempre 2 decimales (sin redondear a entero). */
 export function formatCash(n: number): string {
-  return '€' + Math.round(n).toLocaleString('es-AR')
+  const v = Number(n)
+  const safe = Number.isFinite(v) ? v : 0
+  return (
+    '€' +
+    safe.toLocaleString('es-AR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+  )
+}
+
+/** Parsea monto manual (acepta coma o punto decimal). */
+export function parseMoneyInput(raw: string | number | null | undefined): number {
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : 0
+  const s = String(raw ?? '')
+    .trim()
+    .replace(/\s/g, '')
+    .replace(',', '.')
+  if (!s) return 0
+  const n = Number(s)
+  return Number.isFinite(n) ? n : 0
 }
 
 /** Eje compacto de gráficos (€1k, €500, …). */

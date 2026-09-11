@@ -404,7 +404,7 @@ class StorySequenceIn(BaseModel):
     dolor: str | None = None
     angulo: str | None = None
     cta_text: str | None = None
-    cash_generado: int | None = None
+    cash_generado: float | None = None
     has_cta: bool = False
     chats: int | None = None
     slides: list[StorySlideIn] = Field(default_factory=list)
@@ -416,7 +416,7 @@ class StorySequencePatchRequest(BaseModel):
     angulo: str | None = None
     cta: bool | None = None
     cta_text: str | None = None
-    cash_manual: int | None = None
+    cash_manual: float | None = None
     chats: int | None = None
 
 
@@ -445,9 +445,9 @@ class StorySequenceOut(BaseModel):
     dolor: str | None = None
     angulo: str | None = None
     cta_text: str | None = None
-    cash_generado: int = 0
-    cash_manual: int = 0
-    cash_leads: int = 0
+    cash_generado: float = 0
+    cash_manual: float = 0
+    cash_leads: float = 0
     agendas: int = 0
     has_cta: bool
     chats: int
@@ -480,7 +480,7 @@ class StoriesSequencesSummaryResponse(BaseModel):
 
 
 class YoutubeVideoPatchRequest(BaseModel):
-    cash_manual: int | None = None
+    cash_manual: float | None = None
 
 
 class LeadOut(BaseModel):

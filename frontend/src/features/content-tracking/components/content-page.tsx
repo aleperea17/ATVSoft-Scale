@@ -129,7 +129,10 @@ export function ContentPage({ contentType, platform, title, columns }: ContentPa
         angulos: formData.angulos ? formData.angulos.split(',').map(s => s.trim()).filter(Boolean) : [],
         cta: formData.cta || '',
       },
-      cash: Number(formData.cash) || 0,
+      cash: (() => {
+        const n = Number(String(formData.cash ?? '').replace(',', '.'))
+        return Number.isFinite(n) ? n : 0
+      })(),
       chats: Number(formData.chats) || 0,
       published_at: formData.fecha ? new Date(formData.fecha).toISOString() : new Date().toISOString(),
       url: formData.url || null,
@@ -471,6 +474,9 @@ function ContentFormModal({ open, onClose, item, onSave, title, contentType }: C
             ) : (
               <input
                 type={f.type || 'text'}
+                step={f.key === 'cash' ? '0.01' : f.type === 'number' ? '1' : undefined}
+                inputMode={f.key === 'cash' ? 'decimal' : undefined}
+                min={f.key === 'cash' ? 0 : undefined}
                 value={form[f.key] || ''}
                 onChange={(e) => set(f.key, e.target.value)}
                 className="w-full rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-[13px] text-[var(--text)] outline-none focus:border-[var(--text3)]"

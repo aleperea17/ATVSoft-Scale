@@ -222,13 +222,13 @@ export function SeguimientoReportSection() {
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-[11px] font-medium leading-snug text-[var(--text2)]">Monto ($)</label>
+              <label className="mb-1.5 block text-[11px] font-medium leading-snug text-[var(--text2)]">Monto (€)</label>
               <input
                 type="text"
                 inputMode="decimal"
                 value={form.monto === '' ? '' : form.monto}
                 onChange={(e) => setForm((f) => ({ ...f, monto: e.target.value }))}
-                placeholder="0"
+                placeholder="0.00"
                 className="w-full rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-[13px] text-[var(--text)] outline-none focus:border-[var(--text3)]"
               />
             </div>

@@ -1194,6 +1194,9 @@ function ReelCard({
                 <div className="mt-1 flex items-center justify-center gap-1">
                   <input
                     type="number"
+                    step="0.01"
+                    min={0}
+                    inputMode="decimal"
                     value={cashDraft}
                     onChange={(e) => setCashDraft(e.target.value)}
                     className="w-24 rounded bg-[var(--bg3)] px-2 py-1 text-center font-mono-num text-[14px] font-bold text-[var(--green)] outline-none"
@@ -1201,7 +1204,8 @@ function ReelCard({
                   <button
                     type="button"
                     onClick={() => {
-                      onUpdate(reel.id, 'cash', Number(cashDraft) || 0)
+                      const n = Number(String(cashDraft).trim().replace(',', '.'))
+                      onUpdate(reel.id, 'cash', Number.isFinite(n) ? n : 0)
                       setEditingCash(false)
                     }}
                     className="rounded bg-[var(--accent)] px-2 py-1 text-[10px] font-semibold text-white"

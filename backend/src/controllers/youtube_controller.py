@@ -187,9 +187,6 @@ def _row_to_video(row: YoutubeContent, *, user_id: int, skip_agg: bool = False) 
     cash_manual_f, cash_leads_f, cash_total_f, agendas_n = _cash_parts_for_youtube_row(
         row, user_id=user_id, skip_agg=skip_agg
     )
-    cash_manual_i = int(round(cash_manual_f))
-    cash_leads_i = int(round(cash_leads_f))
-    cash_total_i = int(round(cash_total_f))
     cpc = (cash_total_f / agendas_n) if agendas_n > 0 else 0.0
     return {
         "id": str(row.id),
@@ -206,10 +203,10 @@ def _row_to_video(row: YoutubeContent, *, user_id: int, skip_agg: bool = False) 
             "performanceHistory": ph,
         },
         "classification": cls,
-        "cash": float(cash_total_i),
-        "cash_manual": cash_manual_i,
-        "cash_leads": cash_leads_i,
-        "cash_total": cash_total_i,
+        "cash": float(cash_total_f),
+        "cash_manual": float(cash_manual_f),
+        "cash_leads": float(cash_leads_f),
+        "cash_total": float(cash_total_f),
         "cpc": cpc,
         "chats": int(row.chats or 0),
         "published_at": published_iso,
@@ -563,6 +560,6 @@ def patch_youtube_video(
         except ObjectNotFound:
             raise HTTPException(status_code=404, detail="Video no encontrado.")
         if "cash_manual" in payload and payload["cash_manual"] is not None:
-            row.cash = float(max(0, int(payload["cash_manual"])))
+            row.cash = float(max(0.0, float(payload["cash_manual"])))
         row.updated_at = now
         return _row_to_video(row, user_id=uid, skip_agg=False)

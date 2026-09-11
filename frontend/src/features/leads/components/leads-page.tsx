@@ -1869,10 +1869,16 @@ function LeadsTableCell({
       <input
         autoFocus
         type={col.type === 'number' || col.type === 'currency' ? 'number' : col.type === 'date' ? 'date' : 'text'}
+        step={col.type === 'currency' ? '0.01' : col.type === 'number' ? '1' : undefined}
+        inputMode={col.type === 'currency' ? 'decimal' : undefined}
+        min={col.type === 'currency' ? 0 : undefined}
         defaultValue={col.type === 'date' ? toHtmlDateInputValue(String(value ?? '')) : String(value ?? '')}
         onBlur={(e) => {
           const v = e.target.value
-          if (col.type === 'number' || col.type === 'currency') onSave(Number(v) || 0)
+          if (col.type === 'currency') {
+            const n = Number(String(v).trim().replace(',', '.'))
+            onSave(Number.isFinite(n) ? n : 0)
+          } else if (col.type === 'number') onSave(Number(v) || 0)
           else onSave(v.trim() === '' ? null : v)
         }}
         onKeyDown={(e) => {

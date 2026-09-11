@@ -94,8 +94,16 @@ export default function ObjetivosPage() {
                   <span className="text-[11px] text-[var(--text3)]">/ meta:</span>
                   <input
                     type="number"
+                    step={met.field.includes('cash') ? '0.01' : '1'}
+                    inputMode={met.field.includes('cash') ? 'decimal' : undefined}
                     value={met.target}
-                    onChange={(e) => saveObjective(met.field, Number(e.target.value))}
+                    onChange={(e) => {
+                      const raw = e.target.value
+                      const n = met.field.includes('cash')
+                        ? Number(String(raw).replace(',', '.'))
+                        : Number(raw)
+                      saveObjective(met.field, Number.isFinite(n) ? n : 0)
+                    }}
                     className="w-24 rounded border border-[var(--border2)] bg-[var(--bg3)] px-2 py-1 text-right font-mono-num text-[13px] text-[var(--text)] outline-none focus:border-[var(--text3)]"
                   />
                 </div>

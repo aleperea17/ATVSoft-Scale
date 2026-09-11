@@ -74,6 +74,30 @@ export const DEFAULT_LEAD_STATUSES: LeadStatusDefault[] = [
     requires_followup_date: false,
     is_default: false,
   },
+  {
+    nombre: 'Cancelada',
+    color: '#71717A',
+    counts_as_cierre: false,
+    counts_as_no_show: false,
+    requires_followup_date: false,
+    is_default: false,
+  },
+  {
+    nombre: 'Pendiente de llamar',
+    color: '#38BDF8',
+    counts_as_cierre: false,
+    counts_as_no_show: false,
+    requires_followup_date: false,
+    is_default: false,
+  },
+  {
+    nombre: 'Seguimiento para reagendar',
+    color: '#C084FC',
+    counts_as_cierre: false,
+    counts_as_no_show: false,
+    requires_followup_date: false,
+    is_default: false,
+  },
 ]
 
 export const STATUS_COLORS: Record<string, string> = Object.fromEntries(

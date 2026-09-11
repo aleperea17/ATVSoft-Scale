@@ -30,6 +30,9 @@ DEFAULT_LEAD_STATUSES: list[tuple[str, str, bool, bool, bool, bool]] = [
     ("No show", "#F87171", False, True, False, False),
     ("Re-agendada", "#FBBF24", False, False, False, False),
     ("No compra", "#A855F7", False, False, False, False),
+    ("Cancelada", "#71717A", False, False, False, False),
+    ("Pendiente de llamar", "#38BDF8", False, False, False, False),
+    ("Seguimiento para reagendar", "#C084FC", False, False, False, False),
 ]
 
 FALLBACK_DEFAULT_STATUS = "Pendiente de pago"
@@ -175,8 +178,7 @@ class LeadStatusesServices:
         )
 
     def _ensure_default_catalog(self, user_id: int) -> None:
-        if self._defaults_already_seeded(user_id):
-            return
+        """Inserta filas del seed faltantes por nombre (idempotente; sirve para ampliar el catálogo)."""
         rows = self._rows_for_user(user_id)
         existing_keys = {normalize_status_lookup_key(r.nombre or "") for r in rows}
         missing = [
@@ -184,27 +186,26 @@ class LeadStatusesServices:
             for item in DEFAULT_LEAD_STATUSES
             if normalize_status_lookup_key(item[0]) not in existing_keys
         ]
-        if not missing:
+        if missing:
+            now = datetime.utcnow()
+            next_order = self._next_sort_order(user_id)
+            for i, (nombre, color, cierre, noshow, followup, is_def) in enumerate(missing):
+                LeadStatusType(
+                    user_id=user_id,
+                    nombre=nombre,
+                    color=_valid_hex_color(color),
+                    activo=True,
+                    sort_order=next_order + i,
+                    counts_as_cierre=cierre,
+                    counts_as_no_show=noshow,
+                    requires_followup_date=followup,
+                    is_default=is_def,
+                    created_at=now,
+                )
+            flush()
+        if not self._defaults_already_seeded(user_id):
             self._mark_defaults_seeded(user_id)
             flush()
-            return
-        now = datetime.utcnow()
-        next_order = self._next_sort_order(user_id)
-        for i, (nombre, color, cierre, noshow, followup, is_def) in enumerate(missing):
-            LeadStatusType(
-                user_id=user_id,
-                nombre=nombre,
-                color=_valid_hex_color(color),
-                activo=True,
-                sort_order=next_order + i,
-                counts_as_cierre=cierre,
-                counts_as_no_show=noshow,
-                requires_followup_date=followup,
-                is_default=is_def,
-                created_at=now,
-            )
-        self._mark_defaults_seeded(user_id)
-        flush()
 
     def _remap_legacy_lead_statuses(self, user_id: int) -> None:
         """One-shot: Pendiente→Pendiente de pago, Agendado→Reserva, etc."""
