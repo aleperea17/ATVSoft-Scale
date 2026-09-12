@@ -1362,6 +1362,66 @@ def _migrate_postgres_lead_formulario() -> None:
         conn.close()
 
 
+def _migrate_postgres_feed_post_content() -> None:
+    """Crea `feed_post_content` (posts/carruseles de feed trackeados)."""
+    if (config("DB_PROVIDER", default="") or "").strip().lower() != "postgres":
+        return
+    try:
+        import psycopg2
+    except ImportError:
+        return
+    try:
+        conn = psycopg2.connect(
+            user=config("DB_USER"),
+            password=config("DB_PASS"),
+            host=config("DB_HOST"),
+            dbname=config("DB_NAME"),
+        )
+    except Exception:
+        return
+    try:
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS feed_post_content (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    instagram_id TEXT NOT NULL UNIQUE,
+                    media_type TEXT DEFAULT '',
+                    title TEXT,
+                    thumbnail_url TEXT,
+                    permalink TEXT,
+                    fecha_publicacion TIMESTAMP,
+                    views INTEGER NOT NULL DEFAULT 0,
+                    reach INTEGER NOT NULL DEFAULT 0,
+                    likes INTEGER NOT NULL DEFAULT 0,
+                    comentarios INTEGER NOT NULL DEFAULT 0,
+                    shares INTEGER NOT NULL DEFAULT 0,
+                    guardados INTEGER NOT NULL DEFAULT 0,
+                    keyword TEXT,
+                    cash DOUBLE PRECISION NOT NULL DEFAULT 0,
+                    chats_manuales INTEGER NOT NULL DEFAULT 0,
+                    dolor TEXT,
+                    angulos TEXT,
+                    cta TEXT,
+                    is_pinned_manual BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'utc'),
+                    updated_at TIMESTAMP
+                )
+                """
+            )
+            try:
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_feed_post_content_user_id "
+                    "ON feed_post_content (user_id)"
+                )
+            except Exception:
+                pass
+    finally:
+        conn.close()
+
+
 def _migrate_postgres_lead_status_type() -> None:
     """Crea `lead_status_type` en Postgres."""
     if (config("DB_PROVIDER", default="") or "").strip().lower() != "postgres":
@@ -1496,6 +1556,7 @@ def init_db() -> None:
     _migrate_postgres_remove_closer_marketing()
     _migrate_postgres_offered_program()
     _migrate_postgres_avatar_type()
+    _migrate_postgres_feed_post_content()
     _migrate_postgres_lead_status_type()
     _migrate_postgres_seguimiento_report()
     _migrate_postgres_hot_lead()

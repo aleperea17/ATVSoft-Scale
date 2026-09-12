@@ -81,6 +81,37 @@ class ReelContent(db.Entity):
     updated_at = Optional(datetime)
 
 
+class FeedPostContent(db.Entity):
+    """Posts de feed Instagram (IMAGE / CAROUSEL_ALBUM), p. ej. posts fijados trackeados a mano."""
+
+    _table_ = "feed_post_content"
+
+    id = PrimaryKey(int, auto=True)
+    user_id = Required(int, index=True)
+    instagram_id = Required(str, unique=True)
+    media_type = Optional(str, default="")  # IMAGE | CAROUSEL_ALBUM
+    title = Optional(str)
+    thumbnail_url = Optional(str)
+    permalink = Optional(str)
+    fecha_publicacion = Optional(datetime)
+    # Métricas Graph (views vigente; no impressions deprecadas)
+    views = Required(int, default=0)
+    reach = Required(int, default=0)
+    likes = Required(int, default=0)
+    comentarios = Required(int, default=0)
+    shares = Required(int, default=0)
+    guardados = Required(int, default=0)
+    keyword = Optional(str)
+    cash = Required(float, default=0)
+    chats_manuales = Required(int, default=0)
+    dolor = Optional(str)
+    angulos = Optional(str)
+    cta = Optional(str)
+    is_pinned_manual = Required(bool, default=True)
+    created_at = Required(datetime, default=lambda: datetime.utcnow())
+    updated_at = Optional(datetime)
+
+
 class YoutubeContent(db.Entity):
     """Videos de YouTube sincronizados (Data API v3) por usuario."""
 

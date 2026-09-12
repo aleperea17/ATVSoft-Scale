@@ -223,6 +223,54 @@ class ReelsMetricsOut(BaseModel):
     reels_sin_cta: int
 
 
+class FeedPostResponse(BaseModel):
+    id: str
+    title: str | None = None
+    media_type: str | None = None
+    content_type: str = "feed_post"
+    platform: str = "instagram"
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    classification: dict[str, Any] = Field(default_factory=dict)
+    cash: float = 0
+    chats: int = 0
+    published_at: datetime | None = None
+    url: str | None = None
+    external_id: str
+    keyword: str | None = None
+    manual_chats: int | None = None
+    cash_total: float = 0
+    cpc: float = 0
+    agendas: int = 0
+    is_pinned_manual: bool = True
+    agenda_token: str = Field(description="Valor canónico punto_agenda: post:{id}")
+
+
+class FeedPostsListResponse(BaseModel):
+    posts: list[FeedPostResponse] = Field(default_factory=list)
+    total: int = 0
+    total_cash: float = 0
+    total_chats: int = 0
+
+
+class FeedPostAddRequest(BaseModel):
+    """Permalink (instagram.com/p/...) o media_id de Graph."""
+
+    permalink_or_media_id: str = Field(min_length=1)
+
+
+class FeedPostPatchRequest(BaseModel):
+    cash: float | None = None
+    chats_manuales: int | None = None
+    dolor: str | None = None
+    angulos: str | None = None
+    cta: str | None = None
+    is_pinned_manual: bool | None = None
+
+
+class FeedPostKeywordPatchRequest(BaseModel):
+    keyword: str | None = None
+
+
 class ManychatChatResponse(BaseModel):
     id: str
     keyword: str

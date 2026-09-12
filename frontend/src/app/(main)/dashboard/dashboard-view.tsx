@@ -329,7 +329,7 @@ function leadChatDayForFilter(l: LeadRow): string {
   return ''
 }
 
-function classifyLeadChatSource(l: LeadRow): 'Historias' | 'Reels' | 'Perfil' | 'YouTube' | 'Otros' {
+function classifyLeadChatSource(l: LeadRow): 'Historias' | 'Reels' | 'Perfil' | 'YouTube' | 'Posts' | 'Otros' {
   const url = String(l.content_url || '').toLowerCase()
   if (url.includes('/reel/') || url.includes('instagram.com/reel')) return 'Reels'
   const candidates = [
@@ -341,6 +341,7 @@ function classifyLeadChatSource(l: LeadRow): 'Historias' | 'Reels' | 'Perfil' | 
   ].map(v => String(v || '').trim().toLowerCase())
   for (const s of candidates) {
     if (!s) continue
+    if (s.startsWith('post:') || s === 'post_fijado_instagram') return 'Posts'
     if (s.startsWith('story:') || s.includes('historia') || /\bstor(y|ies)\b/.test(s)) return 'Historias'
     if (s.includes('reel') || /^\d+$/.test(s)) return 'Reels'
     if (textLooksLikeBioTraffic(s) || s === 'perfil') return 'Perfil'
@@ -969,6 +970,7 @@ export default function DashboardPage() {
   const classifyLeadCashSource = (l: LeadRow): string => {
     const ap = String(l.agenda_point || '').trim().toLowerCase()
     if (!ap) return 'Otros'
+    if (ap.startsWith('post:') || ap === 'post_fijado_instagram') return 'Posts'
     if (ap.startsWith('youtube:')) return 'YouTube'
     if (ap.startsWith('story:') || ap.includes('historia') || /\bstor(y|ies)\b/.test(ap)) return 'Historias'
     if (ap.includes('reel') || /^\d+$/.test(ap)) return 'Reels'
@@ -984,6 +986,7 @@ export default function DashboardPage() {
 
   const viewHistoriasCashFromLeads = viewCashBySource('Historias')
   const viewReelsCashFromLeads = viewCashBySource('Reels')
+  const viewPostsCashFromLeads = viewCashBySource('Posts')
   const viewPerfilCash = viewCashBySource('Perfil')
   const viewYtCash = viewCashBySource('YouTube')
   const viewRefCash = viewCashBySource('Referidos')
@@ -1016,7 +1019,8 @@ export default function DashboardPage() {
   const viewHistoriasChats = channelChats.historias
   const viewBioChats = channelChats.bio
   const viewYoutubeChats = channelChats.youtube
-  const viewOtrosChats = channelChats.otros
+  const viewPostsChats = viewChatLeads.filter((l) => classifyLeadChatSource(l) === 'Posts').length
+  const viewOtrosChats = Math.max(0, channelChats.otros - viewPostsChats)
   const viewTotalChats = channelChats.total
 
   const viewReelsCash = viewContent.filter(c => c.content_type === 'reel').reduce((s, c) => s + c.cash, 0)
@@ -1053,6 +1057,7 @@ export default function DashboardPage() {
 
   let donutHistoriasVal = viewHistoriasCashFromLeads || (!viewRange ? viewHistoriasCash : 0)
   let donutReelsVal = viewReelsCashFromLeads || (!viewRange ? viewReelsCash : 0)
+  let donutPostsVal = asFiniteNumber(viewPostsCashFromLeads)
   let donutPerfilVal = vfPerfilLeads > 0 ? vfPerfilLeads : vfBio
   let donutOtrosVal = asFiniteNumber(viewOtrosCash)
   /** Mismo cobro contado como BIO (métricas) y como Otros (clasificación de lead). */
@@ -1063,12 +1068,19 @@ export default function DashboardPage() {
   let donutRefVal = asFiniteNumber(viewRefCash)
 
   let rawDonutSum =
-    donutHistoriasVal + donutReelsVal + donutPerfilVal + donutYtVal + donutRefVal + donutOtrosVal
+    donutHistoriasVal +
+    donutReelsVal +
+    donutPostsVal +
+    donutPerfilVal +
+    donutYtVal +
+    donutRefVal +
+    donutOtrosVal
   const cashCap = viewCash > 0 ? viewCash : rawDonutSum
   if (rawDonutSum > cashCap + 0.01 && rawDonutSum > 0) {
     const sc = cashCap / rawDonutSum
     donutHistoriasVal *= sc
     donutReelsVal *= sc
+    donutPostsVal *= sc
     donutPerfilVal *= sc
     donutYtVal *= sc
     donutRefVal *= sc
@@ -1080,6 +1092,7 @@ export default function DashboardPage() {
   const donutSources = [
     { label: 'Historias', value: donutHistoriasVal, color: '#F59E0B' },
     { label: 'Reels', value: donutReelsVal, color: '#3B82F6' },
+    { label: 'Posts', value: donutPostsVal, color: '#EC4899' },
     { label: 'BIO', value: donutPerfilVal, color: '#8B5CF6' },
     { label: 'YouTube', value: donutYtVal, color: '#FF0000' },
     { label: 'Referidos', value: donutRefVal, color: '#22C55E' },
@@ -1089,6 +1102,7 @@ export default function DashboardPage() {
   const chatsSources = [
     { label: 'Historias', value: viewHistoriasChats, color: '#F59E0B', prevLabel: 'HISTORIAS' },
     { label: 'Reels', value: viewReelsChats, color: '#EF4444', prevLabel: 'REELS' },
+    { label: 'Posts', value: viewPostsChats, color: '#EC4899', prevLabel: 'POSTS' },
     { label: 'BIO', value: viewBioChats, color: '#A855F7', prevLabel: 'BIO' },
     { label: 'YouTube', value: viewYoutubeChats, color: '#FF0000', prevLabel: 'YOUTUBE' },
     { label: 'Otros', value: viewOtrosChats, color: '#6B7280', prevLabel: 'OTROS' },
@@ -1098,10 +1112,12 @@ export default function DashboardPage() {
   const viewBioCashReal = donutPerfilVal
   const reelCashForCpc = donutReelsVal
   const histCashForCpc = asFiniteNumber(donutHistoriasVal)
+  const postsCashForCpc = asFiniteNumber(donutPostsVal)
   const ytCashForCpc = asFiniteNumber(viewYtCash)
   const otrosCashForCpc = asFiniteNumber(donutRefVal + donutOtrosVal)
   const cpcReel = viewReelsChats > 0 ? reelCashForCpc / viewReelsChats : 0
   const cpcHistoria = viewHistoriasChats > 0 ? histCashForCpc / viewHistoriasChats : 0
+  const cpcPosts = viewPostsChats > 0 ? postsCashForCpc / viewPostsChats : 0
   const cpcBio = viewBioChats > 0 ? asFiniteNumber(viewBioCashReal / viewBioChats) : 0
   const cpcYoutube = viewYoutubeChats > 0 ? asFiniteNumber(ytCashForCpc / viewYoutubeChats) : 0
   const cpcOtros = viewOtrosChats > 0 ? asFiniteNumber(otrosCashForCpc / viewOtrosChats) : 0
@@ -1484,6 +1500,7 @@ export default function DashboardPage() {
               {[
                 { label: 'Historias', chats: viewHistoriasChats, cash: histCashForCpc, cpc: cpcHistoria, color: '#F59E0B' },
                 { label: 'Reels', chats: viewReelsChats, cash: reelCashForCpc, cpc: cpcReel, color: '#EF4444' },
+                { label: 'Posts', chats: viewPostsChats, cash: postsCashForCpc, cpc: cpcPosts, color: '#EC4899' },
                 { label: 'BIO', chats: viewBioChats, cash: viewBioCashReal, cpc: cpcBio, color: '#A855F7' },
                 { label: 'YouTube', chats: viewYoutubeChats, cash: ytCashForCpc, cpc: cpcYoutube, color: '#FF0000' },
                 { label: 'Otros', chats: viewOtrosChats, cash: otrosCashForCpc, cpc: cpcOtros, color: '#6B7280' },
@@ -1508,6 +1525,7 @@ export default function DashboardPage() {
               {[
                 { pct: viewHistoriasChats / Math.max(viewTotalChats, 1) * 100, color: '#F59E0B' },
                 { pct: viewReelsChats / Math.max(viewTotalChats, 1) * 100, color: '#EF4444' },
+                { pct: viewPostsChats / Math.max(viewTotalChats, 1) * 100, color: '#EC4899' },
                 { pct: viewBioChats / Math.max(viewTotalChats, 1) * 100, color: '#A855F7' },
                 { pct: viewYoutubeChats / Math.max(viewTotalChats, 1) * 100, color: '#FF0000' },
                 { pct: viewOtrosChats / Math.max(viewTotalChats, 1) * 100, color: '#6B7280' },

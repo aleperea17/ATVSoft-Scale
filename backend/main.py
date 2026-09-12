@@ -29,6 +29,7 @@ from src.controllers.keywords_controller import router as keywords_router
 from src.controllers.leads_controller import router as leads_router
 from src.controllers.hot_leads_controller import router as hot_leads_router
 from src.controllers.reels_controller import router as reels_router
+from src.controllers.feed_posts_controller import router as feed_posts_router
 from src.controllers.stories_controller import router as stories_router
 from src.controllers.sync_settings_controller import router as sync_settings_router
 from src.controllers.team_controller import router as team_router
@@ -38,6 +39,7 @@ from src.controllers.webhook_controller import router as webhook_router
 from src.db import db, init_db
 from src.models import ApiConnection
 from src.services.reels_services import ReelsServices
+from src.services.feed_posts_services import FeedPostsServices
 from src.services.company_config_service import get_company_timezone_name, get_company_tz
 from src.services.sync_scheduler_service import (
     CALENDLY_JOB_ID,
@@ -83,7 +85,7 @@ async def auto_sync_stories() -> None:
 
 
 async def auto_refresh_reels_metrics() -> None:
-    """Actualiza métricas en BD de reels ya existentes (Graph API por instagram_id)."""
+    """Actualiza métricas en BD de reels y posts de feed ya existentes (Graph API)."""
     try:
         with db_session:
             _ = db
@@ -91,12 +93,18 @@ async def auto_refresh_reels_metrics() -> None:
             user_ids = [c.user_id for c in connections]
 
         service = ReelsServices()
+        feed_service = FeedPostsServices()
         for user_id in user_ids:
             try:
                 result = await service.refresh_metrics(str(user_id))
                 print(f"[scheduler] Reels refresh-metrics OK para {user_id}: {result}")
             except Exception as e:
                 print(f"[scheduler] Reels refresh-metrics FAILED para {user_id}: {e}")
+            try:
+                feed_result = await feed_service.refresh_metrics(str(user_id))
+                print(f"[scheduler] Feed-posts refresh-metrics OK para {user_id}: {feed_result}")
+            except Exception as e:
+                print(f"[scheduler] Feed-posts refresh-metrics FAILED para {user_id}: {e}")
     except Exception as e:
         print(f"[scheduler] Error general en auto_refresh_reels_metrics: {e}")
 
@@ -267,6 +275,7 @@ app.include_router(call_reports_router)
 app.include_router(hot_leads_router)
 app.include_router(keywords_router)
 app.include_router(reels_router)
+app.include_router(feed_posts_router)
 app.include_router(bio_router)
 app.include_router(stories_router)
 app.include_router(sync_settings_router)

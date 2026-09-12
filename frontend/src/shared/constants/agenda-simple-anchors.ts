@@ -1,5 +1,6 @@
 /**
  * Anclas simples de `punto_agenda` (sin ID de contenido).
+ * `post_fijado_instagram` es fallback legacy; preferir `post:{id}` de FeedPostContent.
  * Tokens estables para UI + BD; en el futuro se pueden mapear a canales
  * del dashboard (p. ej. Perfil) en classifyLeadCashSource / classifyLeadChatSource.
  */

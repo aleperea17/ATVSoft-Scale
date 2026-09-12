@@ -6,7 +6,7 @@ import { apiFetch } from '@/lib/api'
 import { Modal } from '@/shared/components/modal'
 import { AGENDA_SIMPLE_ANCHORS } from '@/shared/constants/agenda-simple-anchors'
 
-export type AgendaPickerStep = 'menu' | 'reel' | 'historia' | 'youtube'
+export type AgendaPickerStep = 'menu' | 'reel' | 'historia' | 'youtube' | 'post'
 
 type ReelItem = {
   id: string
@@ -23,6 +23,15 @@ type YtItem = {
   title: string | null
   published_at?: string | null
   metrics?: Record<string, string | number>
+}
+
+type FeedPostItem = {
+  id: string
+  title: string | null
+  published_at?: string | null
+  agenda_token?: string
+  metrics?: Record<string, string | number>
+  url?: string | null
 }
 
 type Props = {
@@ -126,6 +135,8 @@ export function AgendaPointPickerModal({
   const [ytPage, setYtPage] = useState(1)
   const [ytTotalPages, setYtTotalPages] = useState(1)
   const [ytTotal, setYtTotal] = useState(0)
+  const [feedPosts, setFeedPosts] = useState<FeedPostItem[]>([])
+  const [loadingPosts, setLoadingPosts] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -140,6 +151,7 @@ export function AgendaPointPickerModal({
       setYtPage(1)
       setYtTotalPages(1)
       setYtTotal(0)
+      setFeedPosts([])
     }
   }, [open])
 
@@ -196,6 +208,33 @@ export function AgendaPointPickerModal({
   const goToReelPicker = () => {
     setReelPage(1)
     setStep('reel')
+  }
+
+  const loadFeedPosts = useCallback(async () => {
+    setLoadingPosts(true)
+    try {
+      const res = await apiFetch('/feed-posts')
+      const data = (await res.json().catch(() => ({}))) as { posts?: FeedPostItem[] }
+      setFeedPosts(Array.isArray(data.posts) ? data.posts : [])
+    } finally {
+      setLoadingPosts(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!open || step !== 'post') return
+    void loadFeedPosts()
+  }, [open, step, loadFeedPosts])
+
+  const pickFeedPost = async (p: FeedPostItem) => {
+    setSaving(true)
+    try {
+      const token = (p.agenda_token || `post:${p.id}`).trim()
+      await onSavePuntoAgenda(token)
+      onClose()
+    } finally {
+      setSaving(false)
+    }
   }
 
   const pickClear = async () => {
@@ -372,14 +411,23 @@ export function AgendaPointPickerModal({
             <button
               type="button"
               disabled={saving}
-              onClick={() => void pickSimpleAnchor(AGENDA_SIMPLE_ANCHORS.post_fijado_instagram.value)}
+              onClick={() => setStep('post')}
               className="rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-4 py-6 text-left transition-colors hover:border-[var(--accent)] disabled:opacity-50"
             >
+              <div className="text-[13px] font-semibold text-[var(--text)]">Post fijado</div>
+              <div className="mt-1 text-[11px] text-[var(--text3)]">Elegí cuál de los posts trackeados</div>
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void pickSimpleAnchor(AGENDA_SIMPLE_ANCHORS.post_fijado_instagram.value)}
+              className="rounded-xl border border-dashed border-[var(--border2)] bg-[var(--bg3)] px-4 py-6 text-left transition-colors hover:border-[var(--accent)] disabled:opacity-50"
+            >
               <div className="text-[13px] font-semibold text-[var(--text)]">
-                {AGENDA_SIMPLE_ANCHORS.post_fijado_instagram.label}
+                {AGENDA_SIMPLE_ANCHORS.post_fijado_instagram.label} (genérico)
               </div>
               <div className="mt-1 text-[11px] text-[var(--text3)]">
-                {AGENDA_SIMPLE_ANCHORS.post_fijado_instagram.hint}
+                Fallback sin métricas — preferí elegir un post concreto arriba
               </div>
             </button>
           </div>
@@ -642,6 +690,59 @@ export function AgendaPointPickerModal({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {step === 'post' && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => setStep('menu')}
+              className="text-[11px] text-[var(--accent)] hover:underline disabled:opacity-50"
+            >
+              ← Volver
+            </button>
+            {loadingPosts && <span className="text-[11px] text-[var(--text3)]">Cargando posts…</span>}
+          </div>
+          {!loadingPosts && feedPosts.length === 0 && (
+            <p className="text-[12px] text-[var(--text3)]">
+              No hay posts fijados trackeados. Cargalos en Trackeo → Post fijados.
+            </p>
+          )}
+          <div className="max-h-[min(60vh,420px)] space-y-2 overflow-y-auto pr-1">
+            {feedPosts.map((p) => {
+              const thumb = String(p.metrics?.thumbnail || '').trim()
+              const thumbUrl = thumb ? `/api/proxy-image?url=${encodeURIComponent(thumb)}` : ''
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void pickFeedPost(p)}
+                  className="flex w-full items-center gap-3 rounded-lg border border-[var(--border2)] bg-[var(--bg4)] p-3 text-left transition-colors hover:border-[var(--accent)] disabled:opacity-50"
+                >
+                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md bg-[var(--bg3)]">
+                    {thumbUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={thumbUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-[var(--text3)]">▣</div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] font-medium text-[var(--text)]">
+                      {(p.title && p.title.trim()) || `Post ${p.id}`}
+                    </div>
+                    <div className="mt-0.5 font-mono-num text-[10px] text-[var(--text3)]">
+                      {p.agenda_token || `post:${p.id}`}
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
         </div>
       )}
     </Modal>

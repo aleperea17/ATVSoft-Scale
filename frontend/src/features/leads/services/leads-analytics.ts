@@ -113,7 +113,7 @@ function textLooksLikeBioTraffic(s: string): boolean {
   return false
 }
 
-export type LeadChatSource = 'Historias' | 'Reels' | 'Perfil' | 'YouTube' | 'Otros'
+export type LeadChatSource = 'Historias' | 'Reels' | 'Perfil' | 'YouTube' | 'Posts' | 'Otros'
 
 export function classifyLeadChatSource(l: LeadRow): LeadChatSource {
   const url = String(l.content_url || '').toLowerCase()
@@ -127,6 +127,7 @@ export function classifyLeadChatSource(l: LeadRow): LeadChatSource {
   ].map(v => String(v || '').trim().toLowerCase())
   for (const s of candidates) {
     if (!s) continue
+    if (s.startsWith('post:') || s === 'post_fijado_instagram') return 'Posts'
     if (s.startsWith('story:') || s.includes('historia') || /\bstor(y|ies)\b/.test(s)) return 'Historias'
     if (s.includes('reel') || /^\d+$/.test(s)) return 'Reels'
     if (textLooksLikeBioTraffic(s) || s === 'perfil') return 'Perfil'

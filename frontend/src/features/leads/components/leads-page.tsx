@@ -71,6 +71,10 @@ function formatAgendaPointBadgeText(
     if (ent) return `[YT] · ${formatAgendaPointDate(ent.publishedAt)}`
     return `[YT] · —`
   }
+  const post = /^post:(\d+)$/i.exec(k)
+  if (post) {
+    return `[POST] · #${post[1]}`
+  }
   const reel = lookups.reels[k]
   if (reel) return `[REEL] · ${formatAgendaPointDate(reel.publishedAt)}`
 

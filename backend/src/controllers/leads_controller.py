@@ -7,7 +7,7 @@ from pony.orm import ObjectNotFound, db_session
 
 from src.lead_display_utils import compute_dias_para_agendar, lead_display_nombre
 from src.models import CallReport as CallReportEntity
-from src.models import Lead as LeadEntity, ReelContent, StorySequence, YoutubeContent
+from src.models import FeedPostContent, Lead as LeadEntity, ReelContent, StorySequence, YoutubeContent
 from src.schemas import (
     LeadCreateRequest,
     LeadOut,
@@ -37,6 +37,7 @@ router = APIRouter(prefix="/api/leads", tags=["leads"], redirect_slashes=False)
 
 _STORY_AGENDA_PREFIX = "story:"
 _YOUTUBE_AGENDA_PREFIX = "youtube:"
+_POST_AGENDA_PREFIX = "post:"
 
 # Tokens fijos de punto_agenda (sin ID de contenido). Futuro: mapear a canales de métricas.
 _SIMPLE_AGENDA_ANCHORS = frozenset(
@@ -49,13 +50,29 @@ _SIMPLE_AGENDA_ANCHORS = frozenset(
 
 
 def _normalize_channel_anchor_value(user_id_int: int, raw: str | None) -> str:
-    """Valor canónico para `punto_agenda` o `via`: bio, reel id, story:<id>, youtube:<id>, anclas simples, texto libre."""
+    """Valor canónico para `punto_agenda` o `via`: bio, reel id, story:<id>, youtube:<id>, post:<id>, anclas simples, texto libre."""
     s = (str(raw) if raw is not None else "").strip()
     if not s:
         return ""
     low = s.casefold()
     if low in _SIMPLE_AGENDA_ANCHORS:
         return low
+    if low.startswith(_POST_AGENDA_PREFIX):
+        rest = s[len(_POST_AGENDA_PREFIX) :].strip()
+        try:
+            pid = int(rest)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Referencia de post inválida (usar post:<id>).",
+            ) from None
+        try:
+            prow = FeedPostContent.get(id=pid)
+        except ObjectNotFound:
+            prow = None
+        if prow is None or int(prow.user_id) != user_id_int:
+            raise HTTPException(status_code=400, detail="Post fijado no encontrado.")
+        return f"{_POST_AGENDA_PREFIX}{pid}"
     if low.startswith(_STORY_AGENDA_PREFIX):
         rest = s[len(_STORY_AGENDA_PREFIX) :].strip()
         try:
