@@ -1030,6 +1030,7 @@ class AgentLlamadaHoyItemOut(BaseModel):
     program_offered: str = ""
     programada_ofrecido_llamada: str = ""
     calificacion_llamada: str = ""
+    notes: str = ""
 
 
 class AgentLlamadasHoyOut(BaseModel):

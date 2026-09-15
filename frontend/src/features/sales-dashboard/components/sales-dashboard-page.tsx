@@ -10,7 +10,11 @@ import { Bar, Line } from '@/shared/components/charts'
 import {
   getLeadsAnalytics,
   monthRangeIso,
+  filterLeadsForFunnelStep,
+  sortLeadsForFunnelStep,
+  setLeadStatusCatalog,
   type FunnelLeadStep,
+  type LeadRow,
 } from '@/features/leads/services/leads-analytics'
 import type { VDData } from '@/features/sales-dashboard/sales-dashboard-vd'
 import { Modal } from '@/shared/components/modal'
@@ -183,13 +187,13 @@ function getMetricExplanation(id: MonthlyMetricId, d: VDData): MetricExplanation
       return {
         title: 'No Shows',
         result: fN(d.noShows),
-        formula: 'max(0, Agendas − Shows). Agendas del setter menos shows del closer.',
+        formula: 'Leads del mes con status marcado counts_as_no_show en el catálogo.',
         data: [
+          { label: 'No shows (leads)', value: fN(d.noShows) },
+          { label: 'Shows (leads)', value: fN(d.shows) },
           { label: 'Agendas (setter)', value: fN(d.agendas) },
-          { label: 'Shows (closer ventas)', value: fN(d.shows) },
-          { label: 'No shows', value: fN(d.noShows) },
         ],
-        source: 'Fuente: agendas en reportes setter y shows en reportes closer ventas del mes.',
+        source: 'Fuente: leads del mes (GET /leads?month=) + flag counts_as_no_show del catálogo de estados.',
       }
     case 'showUpRate':
       return {
@@ -201,7 +205,7 @@ function getMetricExplanation(id: MonthlyMetricId, d: VDData): MetricExplanation
           { label: 'Agendas', value: fN(d.agendas) },
           { label: 'Show up rate', value: fP(d.showUpRate) },
         ],
-        source: 'Fuente: shows (closer ventas) y agendas (setter) del mes.',
+        source: 'Fuente: shows = leads en vivo (no no-show); agendas = reportes setter del mes.',
       }
     case 'closeRate':
       return {
@@ -213,7 +217,8 @@ function getMetricExplanation(id: MonthlyMetricId, d: VDData): MetricExplanation
           { label: 'Shows', value: fN(d.shows) },
           { label: 'Close rate', value: fP(d.closeRate) },
         ],
-        source: 'Fuente: cierres y shows en reportes closer ventas del mes.',
+        source:
+          'Fuente: cierres y shows en vivo desde leads del mes (flags counts_as_cierre / no_show del catálogo).',
       }
     case 'tasaAgendamiento':
       return {
@@ -265,7 +270,7 @@ function getMetricExplanation(id: MonthlyMetricId, d: VDData): MetricExplanation
           { label: 'Shows', value: fN(d.shows) },
           { label: 'Cash / show', value: formatCash(d.cashPorShow) },
         ],
-        source: 'Fuente: cash (Pagó + seguimiento) y shows (reportes closer ventas).',
+        source: 'Fuente: cash (Pagó + seguimiento) y shows en vivo (leads del mes).',
       }
     default:
       return {
@@ -829,26 +834,37 @@ function FunnelSetterReportsBreakdown({
   )
 }
 
-type FunnelCloserVentasReportRow = {
+type FunnelLeadListRow = {
   id: number
   fecha: string
-  member_nombre: string
-  shows: number
-  cierres: number
-  llamadas_agendadas: number
-  ingreso: number
-  nombre_lead: string
-  notas: string
+  client_name: string
+  closer: string
+  status: string
+  payment: number
 }
 
-function FunnelCloserVentasBreakdown({
+function leadDisplayName(l: LeadRow): string {
+  return String(l.client_name || l.nombre || '').trim() || 'Sin nombre'
+}
+
+function leadCallDateIso(l: LeadRow): string {
+  for (const key of ['call', 'scheduled_at', 'call_at', 'agendo', 'date'] as const) {
+    const s = String(l[key] ?? '').trim()
+    if (!s) continue
+    const head = s.slice(0, 10)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(head)) return head
+  }
+  return ''
+}
+
+function FunnelLeadsBreakdown({
   month,
-  metric,
+  step,
 }: {
   month: string
-  metric: 'shows' | 'cierres'
+  step: 'SHOWS' | 'CIERRES'
 }) {
-  const [rows, setRows] = useState<FunnelCloserVentasReportRow[]>([])
+  const [rows, setRows] = useState<FunnelLeadListRow[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -856,53 +872,54 @@ function FunnelCloserVentasBreakdown({
     setLoading(true)
     void (async () => {
       try {
-        const range = monthRangeIso(month)
-        if (!range) {
-          if (!cancelled) setRows([])
-          return
+        try {
+          const stRes = await apiFetch('/lead-statuses')
+          if (stRes.ok) {
+            const stj = (await stRes.json().catch(() => ({}))) as {
+              statuses?: { nombre: string; counts_as_cierre?: boolean; counts_as_no_show?: boolean; requires_followup_date?: boolean }[]
+            }
+            if (Array.isArray(stj.statuses)) setLeadStatusCatalog(stj.statuses)
+          }
+        } catch {
+          /* catálogo default */
         }
-        const res = await apiFetch(
-          `/team/reports?desde=${encodeURIComponent(range.desde)}&hasta=${encodeURIComponent(range.hasta)}`,
-        )
+        const res = await apiFetch(`/leads?month=${encodeURIComponent(month)}`)
         if (!res.ok) {
           if (!cancelled) setRows([])
           return
         }
-        const body = (await res.json().catch(() => ({}))) as { reports?: Record<string, unknown>[] }
-        const closerRows = (Array.isArray(body.reports) ? body.reports : [])
-          .filter((r) => r.kind === 'closer')
-          .map(r => ({
-            id: Number(r.id) || 0,
-            fecha: String(r.fecha ?? '').slice(0, 10),
-            member_nombre: String(r.member_nombre ?? '—'),
-            shows: Number(r.shows) || 0,
-            cierres: Number(r.cierres) || 0,
-            llamadas_agendadas: Number(r.llamadas_agendadas) || 0,
-            ingreso: Number(r.ingreso) || 0,
-            nombre_lead: String(r.nombre_lead ?? '').trim(),
-            notas: String(r.notas ?? '').trim(),
-          }))
-          .filter(r => /^\d{4}-\d{2}-\d{2}$/.test(r.fecha))
-          .sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id - a.id)
-        if (!cancelled) setRows(closerRows)
+        const body = (await res.json().catch(() => ({}))) as { leads?: LeadRow[] }
+        const leads = Array.isArray(body.leads) ? body.leads : []
+        const filtered = sortLeadsForFunnelStep(filterLeadsForFunnelStep(leads, step), step)
+        const mapped: FunnelLeadListRow[] = filtered.map((l) => ({
+          id: Number(l.id) || 0,
+          fecha: leadCallDateIso(l),
+          client_name: leadDisplayName(l),
+          closer: String(l.closer ?? '').trim() || '—',
+          status: String(l.status ?? '').trim() || '—',
+          payment: Number(l.payment) || 0,
+        }))
+        if (!cancelled) setRows(mapped)
       } finally {
         if (!cancelled) setLoading(false)
       }
     })()
-    return () => { cancelled = true }
-  }, [month])
+    return () => {
+      cancelled = true
+    }
+  }, [month, step])
 
-  const total = rows.reduce((sum, r) => sum + r[metric], 0)
-  const metricLabel = metric === 'shows' ? 'Shows' : 'Cierres'
+  const metricLabel = step === 'SHOWS' ? 'Shows' : 'Cierres'
+  const totalPago = rows.reduce((s, r) => s + r.payment, 0)
 
   if (loading) {
-    return <p className="py-8 text-center text-[13px] text-[var(--text3)]">Cargando reportes closer...</p>
+    return <p className="py-8 text-center text-[13px] text-[var(--text3)]">Cargando leads...</p>
   }
 
   if (rows.length === 0) {
     return (
       <p className="py-8 text-center text-[13px] text-[var(--text3)]">
-        No hay reportes closer (ventas) en este mes.
+        No hay leads de {metricLabel.toLowerCase()} en este mes.
       </p>
     )
   }
@@ -913,69 +930,42 @@ function FunnelCloserVentasBreakdown({
         <thead>
           <tr className="border-b border-[var(--border)]">
             <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">Fecha</th>
-            <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">Closer</th>
-            <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">Shows</th>
-            <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">Cierres</th>
-            <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">Agendadas</th>
-            <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">Ingreso</th>
             <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">Lead</th>
-            <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">Notas</th>
+            <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">Closer</th>
+            <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">Status</th>
+            <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">Pagó</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map(r => (
+          {rows.map((r) => (
             <tr key={r.id} className="border-b border-[var(--border)]">
               <td className="px-3 py-2.5 font-mono-num text-[12px] text-[var(--text2)]">
-                {formatIsoDateDdMmYyyy(r.fecha)}
+                {r.fecha ? formatIsoDateDdMmYyyy(r.fecha) : '—'}
               </td>
-              <td className="px-3 py-2.5 text-[13px] font-medium text-[var(--text)]">{r.member_nombre}</td>
-              <td className={`px-3 py-2.5 text-right font-mono-num text-[13px]${metric === 'shows' ? ' font-semibold text-[var(--accent)]' : ' text-[12px] text-[var(--text2)]'}`}>
-                {fN(r.shows)}
-              </td>
-              <td className={`px-3 py-2.5 text-right font-mono-num text-[13px]${metric === 'cierres' ? ' font-semibold text-[var(--accent)]' : ' text-[12px] text-[var(--text2)]'}`}>
-                {fN(r.cierres)}
-              </td>
-              <td className="px-3 py-2.5 text-right font-mono-num text-[12px] text-[var(--text2)]">
-                {fN(r.llamadas_agendadas)}
-              </td>
-              <td className="px-3 py-2.5 text-right font-mono-num text-[12px] text-[var(--text2)]">
-                {formatCash(r.ingreso)}
-              </td>
-              <td className="max-w-[140px] truncate px-3 py-2.5 text-[12px] text-[var(--text2)]" title={r.nombre_lead || undefined}>
-                {r.nombre_lead || '—'}
-              </td>
-              <td className="max-w-[180px] truncate px-3 py-2.5 text-[12px] text-[var(--text3)]" title={r.notas || undefined}>
-                {r.notas || '—'}
+              <td className="px-3 py-2.5 text-[13px] font-medium text-[var(--text)]">{r.client_name}</td>
+              <td className="px-3 py-2.5 text-[13px] text-[var(--text2)]">{r.closer}</td>
+              <td className="px-3 py-2.5 text-[13px] text-[var(--text2)]">{r.status}</td>
+              <td className="px-3 py-2.5 text-right font-mono-num text-[13px] text-[var(--text)]">
+                {formatCash(r.payment)}
               </td>
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr className="border-t border-[var(--border2)] bg-[var(--bg3)]">
-            <td colSpan={2} className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--text3)]">
-              Total del mes
+            <td colSpan={3} className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--text3)]">
+              Total · {fN(rows.length)} {metricLabel.toLowerCase()}
             </td>
-            {metric === 'shows' ? (
-              <>
-                <td className="px-3 py-2.5 text-right font-mono-num text-[14px] font-bold text-[var(--accent)]">
-                  {fN(total)}
-                </td>
-                <td colSpan={5} />
-              </>
-            ) : (
-              <>
-                <td />
-                <td className="px-3 py-2.5 text-right font-mono-num text-[14px] font-bold text-[var(--accent)]">
-                  {fN(total)}
-                </td>
-                <td colSpan={4} />
-              </>
-            )}
+            <td />
+            <td className="px-3 py-2.5 text-right font-mono-num text-[14px] font-bold text-[var(--accent)]">
+              {formatCash(totalPago)}
+            </td>
           </tr>
         </tfoot>
       </table>
       <p className="mt-4 text-[11px] text-[var(--text3)]">
-        {rows.length} {rows.length === 1 ? 'reporte' : 'reportes'} closer (ventas) · total {metricLabel.toLowerCase()} = suma diaria del equipo
+        {rows.length} {rows.length === 1 ? 'lead' : 'leads'} · misma fuente en vivo que el KPI del embudo
+        (catálogo de estados)
       </p>
     </div>
   )
@@ -1025,16 +1015,18 @@ function FunnelBreakdownModal({
         </>
       ) : step === 'SHOWS' ? (
         <>
-          <FunnelCloserVentasBreakdown month={month} metric="shows" />
+          <FunnelLeadsBreakdown month={month} step="SHOWS" />
           <p className="mt-4 text-[11px] text-[var(--text3)]">
-            Shows del mes = suma de reportes diarios del closer (ventas), misma fuente que el embudo.
+            Shows del mes = leads del mes con agenda y sin flag no-show (en vivo, sin depender de
+            regenerar reportes).
           </p>
         </>
       ) : step === 'CIERRES' ? (
         <>
-          <FunnelCloserVentasBreakdown month={month} metric="cierres" />
+          <FunnelLeadsBreakdown month={month} step="CIERRES" />
           <p className="mt-4 text-[11px] text-[var(--text3)]">
-            Cierres del mes = suma de reportes diarios del closer (ventas), misma fuente que el embudo.
+            Cierres del mes = leads del mes con counts_as_cierre en el catálogo (en vivo, sin depender
+            de regenerar reportes).
           </p>
         </>
       ) : null}

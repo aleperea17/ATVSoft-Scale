@@ -395,19 +395,25 @@ export async function getLeadsAnalytics(month: string): Promise<{ leads: LeadRow
 
   const chats = chatsReels + chatsStories
 
-  // Embudo y series: reportes diarios setter + closer (ventas); programas y revenue desde leads
+  // Embudo: setter reports (conversaciones/agendas) + leads en vivo (shows/cierres/cash).
+  // Mes de cada lead = mismo filtro que GET /leads?month= (call > agendo > fecha_bot > created_at).
   const sumField = (reports: Record<string, unknown>[], field: string) =>
     reports.reduce((s, r) => s + (Number(r[field]) || 0), 0)
 
   const conversaciones = sumField(setterReports, 'conversaciones')
   const agendas = sumField(setterReports, 'agendas')
-  const shows = sumField(closerReports, 'shows')
-  const cierres = sumField(closerReports, 'cierres')
+  /** Shows / cierres en vivo: flag del catálogo LeadStatusType (no CloserReport congelado). */
+  const shows = leads.filter(leadHasShow).length
+  const cierres = leads.filter(leadIsCierre).length
+  const noShows = leads.filter(
+    (l) => resolveLeadStatusFlags(String(l.status ?? ''), _statusCatalog).counts_as_no_show,
+  ).length
   const conversacionesStories = sumField(setterReports, 'conversaciones_stories')
   const conversacionesReels = sumField(setterReports, 'conversaciones_reels')
   const agendasStories = sumField(setterReports, 'agendas_stories')
   const agendasReels = sumField(setterReports, 'agendas_reels')
   const agendasAds = sumField(setterReports, 'agendas_ads')
+  /** Desglose orgánico/ads sigue en reportes (campos legacy; suele ser 0). */
   const showsOrganico = sumField(closerReports, 'shows_organico')
   const showsAds = sumField(closerReports, 'shows_ads')
   const cierresOrganico = sumField(closerReports, 'cierres_organico')
@@ -417,7 +423,6 @@ export async function getLeadsAnalytics(month: string): Promise<{ leads: LeadRow
   const cashFromLeadsPayments = leads.reduce((s, l) => s + (Number(l.payment) || 0), 0)
   /** Cash collected = suma columna Pagó (`payment`) en leads del mes + montos de formularios de seguimiento. */
   const cashCollected = cashFromLeadsPayments + seguimientoTotal
-  const noShows = Math.max(0, agendas - shows)
 
   const catalogDefined = Object.keys(programPrices).length > 0
   const leadsWithProgramOfferedCount = leads.filter(
@@ -449,7 +454,7 @@ export async function getLeadsAnalytics(month: string): Promise<{ leads: LeadRow
   const revenueLeads = leads.reduce((s, l) => s + leadFacturacionUsd(l), 0)
   const facturacion = revenueLeads > 0 ? revenueLeads : ingresosReports
 
-  /** Cantidad de ventas: leads con Prog. comprado; si no hay, cierres del reporte closer. */
+  /** Cantidad de ventas: leads con Prog. comprado; si no hay, cierres en vivo. */
   const ventas =
     leadsWithProgramOfferedCount > 0 ? leadsWithProgramOfferedCount : cierres
 
@@ -488,7 +493,7 @@ export async function getLeadsAnalytics(month: string): Promise<{ leads: LeadRow
     .map(([nombre, v]) => ({ nombre, ...v }))
     .sort((a, b) => b.ingresos - a.ingresos)
 
-  // Weekly + daily distributions from daily_reports by actual date
+  // Weekly + daily: conversaciones/agendas desde reportes setter; shows/cierres desde leads en vivo
   const allReports = [...setterReports, ...closerReports]
   const byWeek: WeekMetrics = {
     agendas: [0, 0, 0, 0],
@@ -519,15 +524,33 @@ export async function getLeadsAnalytics(month: string): Promise<{ leads: LeadRow
 
     const conv = Number(r.conversaciones) || 0
     const ag = Number(r.agendas) || 0
-    const sh = Number(r.shows) || 0
-    const ci = Number(r.cierres) || 0
     const ing = Number(r.ingreso) || 0
 
     byWeek.conversaciones[w] += conv; byWeekDay.conversaciones[w][dow] += conv
     byWeek.agendas[w] += ag;         byWeekDay.agendas[w][dow] += ag
-    byWeek.shows[w] += sh;           byWeekDay.shows[w][dow] += sh
-    byWeek.cierres[w] += ci;         byWeekDay.cierres[w][dow] += ci
     byWeek.ingresos[w] += ing;       byWeekDay.ingresos[w][dow] += ing
+  })
+
+  leads.forEach((l) => {
+    const iso = leadMetricDateIso(l)
+    if (!iso) return
+    const date = new Date(`${iso}T12:00:00`)
+    if (Number.isNaN(date.getTime())) return
+    const dayOfMonth = date.getDate()
+    const w = Math.min(3, Math.floor((dayOfMonth - 1) / 7))
+    const dow = (date.getDay() + 6) % 7
+    if (leadHasShow(l)) {
+      byWeek.shows[w] += 1
+      byWeekDay.shows[w][dow] += 1
+    }
+    if (leadIsCierre(l)) {
+      byWeek.cierres[w] += 1
+      byWeekDay.cierres[w][dow] += 1
+    }
+    if (resolveLeadStatusFlags(String(l.status ?? ''), _statusCatalog).counts_as_no_show) {
+      byWeek.noShows[w] += 1
+      byWeekDay.noShows[w][dow] += 1
+    }
   })
 
   seguimientoEntries.forEach((e) => {
@@ -557,14 +580,6 @@ export async function getLeadsAnalytics(month: string): Promise<{ leads: LeadRow
     byWeek.facturacion[w] += bill
     byWeekDay.facturacion[w][dow] += bill
   })
-
-  // Compute noShows per week and per day
-  for (let w = 0; w < 4; w++) {
-    byWeek.noShows[w] = Math.max(0, byWeek.agendas[w] - byWeek.shows[w])
-    for (let d = 0; d < 7; d++) {
-      byWeekDay.noShows[w][d] = Math.max(0, byWeekDay.agendas[w][d] - byWeekDay.shows[w][d])
-    }
-  }
 
   return {
     leads,

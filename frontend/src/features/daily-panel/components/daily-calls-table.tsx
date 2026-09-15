@@ -23,6 +23,7 @@ type Props = {
   onFathomLinkChange: (leadId: number, callLink: string | null) => Promise<void>
   onPaymentChange: (leadId: number, payment: number) => Promise<void>
   onOwedChange: (leadId: number, owed: number) => Promise<void>
+  onNotesChange: (leadId: number, notes: string) => Promise<void>
   onProgramOfferedChange: (leadId: number, program: string) => Promise<void>
   onProgramadaOfrecidoChange: (leadId: number, program: string) => Promise<void>
   onAddManualCall?: () => void
@@ -326,6 +327,81 @@ function PaymentCell({
   return <CurrencyCell leadId={leadId} value={value} variant="payment" onSave={onSave} />
 }
 
+function NotesCell({
+  leadId,
+  value,
+  onSave,
+}: {
+  leadId: number
+  value: string
+  onSave: (leadId: number, notes: string) => Promise<void>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const skipBlurRef = useRef(false)
+  const trimmed = value.trim()
+
+  const commit = async (next: string) => {
+    const normalized = next.trim()
+    if (normalized === trimmed) {
+      setEditing(false)
+      return
+    }
+    setSaving(true)
+    try {
+      await onSave(leadId, normalized)
+      setEditing(false)
+    } catch {
+      /* toast en el padre */
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (editing) {
+    return (
+      <textarea
+        autoFocus
+        rows={2}
+        defaultValue={trimmed}
+        disabled={saving}
+        placeholder="Notas del closer…"
+        className="neo-calls__notes-input"
+        onBlur={(e) => {
+          if (skipBlurRef.current) {
+            skipBlurRef.current = false
+            return
+          }
+          void commit(e.target.value)
+        }}
+        onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => {
+          if (e.key === 'Escape') {
+            e.preventDefault()
+            skipBlurRef.current = true
+            setEditing(false)
+          }
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault()
+            void commit(e.currentTarget.value)
+          }
+        }}
+      />
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={saving}
+      onClick={() => setEditing(true)}
+      className={`neo-calls__notes ${trimmed ? '' : 'neo-calls__notes--empty'}`}
+      title={trimmed || 'Agregar nota'}
+    >
+      {trimmed || '—'}
+    </button>
+  )
+}
+
 function FathomLinkCell({
   leadId,
   value,
@@ -443,6 +519,7 @@ export function DailyCallsTable({
   onFathomLinkChange,
   onPaymentChange,
   onOwedChange,
+  onNotesChange,
   onProgramOfferedChange,
   onProgramadaOfrecidoChange,
   onAddManualCall,
@@ -485,6 +562,7 @@ export function DailyCallsTable({
         <div>Prog. ofrecido</div>
         <div>Pago</div>
         <div>Debe</div>
+        <div>Notas</div>
       </div>
       {items.map((row) => (
         <div key={row.id} className="neo-calls__row">
@@ -522,6 +600,7 @@ export function DailyCallsTable({
           />
           <PaymentCell leadId={row.id} value={row.payment} onSave={onPaymentChange} />
           <CurrencyCell leadId={row.id} value={row.owed} variant="owed" onSave={onOwedChange} />
+          <NotesCell leadId={row.id} value={row.notes} onSave={onNotesChange} />
         </div>
       ))}
     </div>

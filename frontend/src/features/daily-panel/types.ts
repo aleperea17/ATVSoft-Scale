@@ -10,6 +10,7 @@ export type DailyCall = {
   programada_ofrecido_llamada: string
   payment: number
   owed: number
+  notes: string
 }
 
 export type ManualCallInput = {

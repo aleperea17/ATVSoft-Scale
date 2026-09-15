@@ -19,6 +19,7 @@ import {
   patchLeadCloser,
   patchLeadOwed,
   patchLeadPayment,
+  patchLeadNotes,
   patchLeadProgramOffered,
   patchLeadProgramadaOfrecido,
   patchLeadSetter,
@@ -263,6 +264,21 @@ export function DailyPanelPage({
         )
       } catch (e) {
         toast(e instanceof Error ? e.message : 'No se pudo guardar el debe.')
+        throw e
+      }
+    },
+    [toast],
+  )
+
+  const handleNotesChange = useCallback(
+    async (leadId: number, notes: string) => {
+      try {
+        await patchLeadNotes(leadId, notes)
+        setCalls((prev) =>
+          prev.map((c) => (c.id === leadId ? { ...c, notes } : c)),
+        )
+      } catch (e) {
+        toast(e instanceof Error ? e.message : 'No se pudo guardar la nota.')
         throw e
       }
     },
@@ -532,6 +548,7 @@ export function DailyPanelPage({
           onFathomLinkChange={handleFathomLinkChange}
           onPaymentChange={handlePaymentChange}
           onOwedChange={handleOwedChange}
+          onNotesChange={handleNotesChange}
           onProgramOfferedChange={handleProgramOfferedChange}
           onProgramadaOfrecidoChange={handleProgramadaOfrecidoChange}
           onAddManualCall={() => setManualOpen(true)}

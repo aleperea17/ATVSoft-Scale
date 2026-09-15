@@ -6,6 +6,10 @@ from pony.orm import db_session
 from src.env_public import manychat_webhook_token
 from src.lead_display_utils import compute_dias_para_agendar
 from src.models import ApiConnection, Lead, ReelContent
+from src.services.calendly_event_type_filter import (
+    extract_event_type_uri,
+    is_event_type_allowed,
+)
 from src.services.lead_statuses_services import booking_lead_status_name
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"], redirect_slashes=False)
@@ -543,7 +547,12 @@ async def calendly_webhook(request: Request) -> dict[str, str]:
                 status_code=404,
                 detail="No hay conexión ApiConnection con platform=calendly.",
             )
-        user_id = int(calendly_conns[0].user_id)
+        conn0 = calendly_conns[0]
+        user_id = int(conn0.user_id)
+        creds = conn0.credentials if isinstance(conn0.credentials, dict) else {}
+        event_type_uri = extract_event_type_uri(inner_payload, flat)
+        if not is_event_type_allowed(creds, event_type_uri):
+            return {"status": "ok", "skipped": "event_type"}
 
         row = _find_lead_for_calendly(user_id, display_name, ig_hint)
         booking = booking_lead_status_name(user_id)

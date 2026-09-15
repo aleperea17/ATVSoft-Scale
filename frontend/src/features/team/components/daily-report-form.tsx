@@ -29,6 +29,7 @@ type DailyReport = {
   insights_marketing: string
   seguimientos: number
   outbounds: number
+  formularios: number
   dia_bueno_malo: string
 }
 
@@ -70,6 +71,7 @@ type NumKey =
   | 'calendly_links'
   | 'seguimientos'
   | 'outbounds'
+  | 'formularios'
   | 'calls_scheduled'
   | 'shows'
   | 'cierres'
@@ -133,6 +135,7 @@ export function DailyReportSection({ role }: Props) {
     insights_marketing: '',
     seguimientos: 0,
     outbounds: 0,
+    formularios: 0,
     dia_bueno_malo: '',
   })
 
@@ -411,6 +414,7 @@ export function DailyReportSection({ role }: Props) {
             insights_marketing: form.insights_marketing.trim() || null,
             seguimientos: form.seguimientos,
             outbounds: form.outbounds,
+            formularios: form.formularios,
             dia_bueno_malo: form.dia_bueno_malo.trim() || null,
           }),
         })
@@ -630,9 +634,10 @@ export function DailyReportSection({ role }: Props) {
             {numField('agendas', 'Agendas', false, 'text-[11px] font-medium leading-snug text-[var(--text2)]')}
             {numField('calendly_links', 'Calendlys enviados', false, 'text-[11px] font-medium leading-snug text-[var(--text2)]')}
           </div>
-          <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
             {numField('seguimientos', 'Seguimientos', false, 'text-[11px] font-medium leading-snug text-[var(--text2)]')}
-            {numField('outbounds', 'Outbounds', false, 'text-[11px] font-medium leading-snug text-[var(--text2)]')}
+            {numField('outbounds', 'Bienvenidas IG', false, 'text-[11px] font-medium leading-snug text-[var(--text2)]')}
+            {numField('formularios', 'Formularios', false, 'text-[11px] font-medium leading-snug text-[var(--text2)]')}
           </div>
           <div className="mb-4">
             <label className="mb-2 block text-[12px] font-medium leading-snug text-[var(--text)]">

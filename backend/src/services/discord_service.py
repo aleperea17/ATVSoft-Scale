@@ -43,7 +43,8 @@ class DiscordServices:
                     "value": (
                         f"Leads nuevos: **{body.get('leads_nuevos', 0)}**\n"
                         f"Seguimientos: **{body.get('seguimientos', 0)}**\n"
-                        f"Outbounds: **{body.get('outbounds', 0)}**"
+                        f"Bienvenidas IG: **{body.get('outbounds', 0)}**\n"
+                        f"Formularios: **{body.get('formularios', 0)}**"
                     ),
                     "inline": False,
                 },

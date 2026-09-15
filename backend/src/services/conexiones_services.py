@@ -9,7 +9,9 @@ from src.schemas import ApiConnectionResponse, ApiConnectionUpsertRequest
 from src.services.anthropic_service import invalidate_claude_status_cache
 from src.services.calendly_webhook_service import ensure_calendly_webhook_subscription
 
-_CALENDLY_CREDENTIAL_KEYS = frozenset({"api_key", "signing_key", "webhook_subscription_uri"})
+_CALENDLY_CREDENTIAL_KEYS = frozenset(
+    {"api_key", "signing_key", "webhook_subscription_uri", "event_type_allowlist"}
+)
 
 
 def _sanitize_calendly_credentials(creds: dict) -> dict:

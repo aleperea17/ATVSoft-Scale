@@ -16,6 +16,7 @@ type ApiDailyCallRow = {
   program_offered?: string
   programada_ofrecido_llamada?: string
   calificacion_llamada?: string
+  notes?: string
 }
 
 function normalizeCalificacion(raw: string | undefined): DailyCall['calificacion_llamada'] {
@@ -109,6 +110,7 @@ export async function getDailyCalls(
       programada_ofrecido_llamada: (row.programada_ofrecido_llamada || '').trim(),
       payment: Number(row.payment) || 0,
       owed: Number(row.owed) || 0,
+      notes: String(row.notes ?? '').trim(),
     })
   }
 
@@ -283,6 +285,22 @@ export async function patchLeadPayment(leadId: number, payment: number): Promise
       typeof raw === 'object' && raw && 'detail' in raw
         ? String((raw as { detail: unknown }).detail)
         : 'No se pudo guardar el pago.'
+    throw new Error(detail)
+  }
+}
+
+export async function patchLeadNotes(leadId: number, notes: string): Promise<void> {
+  const res = await apiFetch(`/leads/${encodeURIComponent(String(leadId))}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notes }),
+  })
+  const raw = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const detail =
+      typeof raw === 'object' && raw && 'detail' in raw
+        ? String((raw as { detail: unknown }).detail)
+        : 'No se pudo guardar la nota.'
     throw new Error(detail)
   }
 }

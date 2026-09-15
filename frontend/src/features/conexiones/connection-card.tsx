@@ -16,7 +16,7 @@ export type ConnectionRow = {
 }
 
 const WEBHOOK_PLATFORMS = ['manychat', 'calendly'] as const
-const CALENDLY_CREDENTIAL_KEYS = ['api_key', 'signing_key'] as const
+const CALENDLY_CREDENTIAL_KEYS = ['api_key', 'signing_key', 'event_type_allowlist'] as const
 
 function calendlyCredentialsOnly(creds: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {}
@@ -500,13 +500,23 @@ function ConnectionCardInner({
           <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">
             {f.label}
           </label>
-          <input
-            type={f.type || 'text'}
-            value={form[f.key] || ''}
-            onChange={(e) => setForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
-            placeholder={f.placeholder}
-            className="w-full rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-[13px] text-[var(--text)] outline-none placeholder:text-[var(--text3)] focus:border-[var(--text3)]"
-          />
+          {f.type === 'textarea' ? (
+            <textarea
+              rows={3}
+              value={form[f.key] || ''}
+              onChange={(e) => setForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
+              placeholder={f.placeholder}
+              className="w-full resize-y rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-[13px] text-[var(--text)] outline-none placeholder:text-[var(--text3)] focus:border-[var(--text3)]"
+            />
+          ) : (
+            <input
+              type={f.type || 'text'}
+              value={form[f.key] || ''}
+              onChange={(e) => setForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
+              placeholder={f.placeholder}
+              className="w-full rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-[13px] text-[var(--text)] outline-none placeholder:text-[var(--text3)] focus:border-[var(--text3)]"
+            />
+          )}
           {!isSetup && platform.key === 'instagram' && f.key === 'access_token' && (
             <Link
               href="/configuracion/instagram-token-guide"

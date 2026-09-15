@@ -20,9 +20,10 @@ from src.controllers.webhook_controller import (
     _merge_calendly_email_notas,
     _parse_calendly_start_time,
 )
-from src.lead_display_utils import compute_dias_para_agendar
-from src.models import ApiConnection, Lead
-from src.services.lead_statuses_services import booking_lead_status_name
+from src.services.calendly_event_type_filter import (
+    extract_event_type_uri,
+    is_event_type_allowed,
+)
 
 router = APIRouter(prefix="/calendly", tags=["calendly"], redirect_slashes=False)
 
@@ -325,7 +326,12 @@ def check_calendly_pending(uid: int) -> dict[str, Any]:
             month=None,
             max_pages=1,
         )
-        pending_events = [e for e in events if _event_is_newer_than(e, last_sync)]
+        pending_events = [
+            e
+            for e in events
+            if _event_is_newer_than(e, last_sync)
+            and is_event_type_allowed(creds, extract_event_type_uri(e))
+        ]
         has_pending = len(pending_events) > 0
         _set_calendly_last_check(uid, has_pending=has_pending)
         return {
@@ -528,6 +534,11 @@ def _run_calendly_sync(
         invitee_request_count = 0
         for event in events:
             if since is not None and not _event_is_newer_than(event, since):
+                events_skipped += 1
+                continue
+
+            event_type_uri = extract_event_type_uri(event)
+            if not is_event_type_allowed(creds, event_type_uri):
                 events_skipped += 1
                 continue
 

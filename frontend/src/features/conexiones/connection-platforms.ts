@@ -25,6 +25,13 @@ const PLATFORMS: ConnectionPlatform[] = [
     fields: [
       { key: 'api_key', label: 'Personal Access Token', placeholder: 'eyJraWQ...', type: 'password' },
       { key: 'signing_key', label: 'Webhook Signing Key', placeholder: 'whsec_...', type: 'password' },
+      {
+        key: 'event_type_allowlist',
+        label: 'Event types permitidos (URIs)',
+        placeholder: 'https://api.calendly.com/event_types/…',
+        type: 'textarea',
+        span: 2,
+      },
     ],
     guide: {
       title: 'Cómo configurar Calendly',
@@ -33,6 +40,7 @@ const PLATFORMS: ConnectionPlatform[] = [
         'Generá un Personal Access Token y pegalo acá',
         'Creá un webhook en Calendly con la URL de abajo y el evento invitee.created',
         'Copiá el Signing Key del webhook y pegalo en el campo correspondiente',
+        'Pegá las URIs de event types a sincronizar (ej. solo Valoración). Separá con saltos de línea. Vacío = no sincroniza nada.',
       ],
     },
   },

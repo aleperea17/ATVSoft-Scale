@@ -29,6 +29,7 @@ type ReportRow =
       leads_nuevos: number
       seguimientos: number
       outbounds: number
+      formularios: number
       dia_bueno_malo: string
     }
   | {
@@ -171,8 +172,12 @@ function SetterReportDetail({ r }: { r: Extract<ReportRow, { kind: 'setter' }> }
             <span className="font-mono-num text-[var(--text)]">{r.seguimientos ?? 0}</span>
           </div>
           <div>
-            <span className="block text-[10px] uppercase tracking-wide text-[var(--text3)]">Outbounds</span>
+            <span className="block text-[10px] uppercase tracking-wide text-[var(--text3)]">Bienvenidas IG</span>
             <span className="font-mono-num text-[var(--text)]">{r.outbounds ?? 0}</span>
+          </div>
+          <div>
+            <span className="block text-[10px] uppercase tracking-wide text-[var(--text3)]">Formularios</span>
+            <span className="font-mono-num text-[var(--text)]">{r.formularios ?? 0}</span>
           </div>
           {tasaAgend != null ? (
             <div>

@@ -297,6 +297,7 @@ class SetterReport(db.Entity):
     leads_nuevos = Required(int, default=0)
     seguimientos = Required(int, default=0)
     outbounds = Required(int, default=0)
+    formularios = Required(int, default=0)
     conversaciones_stories = Required(int, default=0)
     conversaciones_reels = Required(int, default=0)
     agendas_stories = Required(int, default=0)

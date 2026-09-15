@@ -55,6 +55,7 @@ def _setter_report_discord_payload(r: SetterReport) -> dict[str, Any]:
         "leads_nuevos": int(getattr(r, "leads_nuevos", 0) or 0),
         "seguimientos": int(getattr(r, "seguimientos", 0) or 0),
         "outbounds": int(getattr(r, "outbounds", 0) or 0),
+        "formularios": int(getattr(r, "formularios", 0) or 0),
         "sentimiento_trafico": sentimiento or None,
         "avatar_tipo_agendas": avatar or None,
         "insights_marketing": insights or None,
@@ -158,6 +159,7 @@ def _collect_team_reports(uid: int, desde: date, hasta: date) -> list[dict[str, 
                     "leads_nuevos": int(getattr(r, "leads_nuevos", 0) or 0),
                     "seguimientos": int(getattr(r, "seguimientos", 0) or 0),
                     "outbounds": int(getattr(r, "outbounds", 0) or 0),
+                    "formularios": int(getattr(r, "formularios", 0) or 0),
                     "conversaciones_stories": int(getattr(r, "conversaciones_stories", 0) or 0),
                     "conversaciones_reels": int(getattr(r, "conversaciones_reels", 0) or 0),
                     "agendas_stories": int(getattr(r, "agendas_stories", 0) or 0),
@@ -274,6 +276,7 @@ class SetterReportBody(BaseModel):
     leads_nuevos: int = 0
     seguimientos: int = 0
     outbounds: int = 0
+    formularios: int = 0
     dia_bueno_malo: str | None = None
 
 
@@ -546,6 +549,7 @@ def save_setter_report(body: SetterReportBody, user_id: str = Depends(require_us
             r.leads_nuevos = body.leads_nuevos
             r.seguimientos = body.seguimientos
             r.outbounds = body.outbounds
+            r.formularios = body.formularios
             r.dia_bueno_malo = _notas_str(body.dia_bueno_malo)
             result = ReportSavedOut(id=r.id, updated=True)
         else:
@@ -570,6 +574,7 @@ def save_setter_report(body: SetterReportBody, user_id: str = Depends(require_us
                 leads_nuevos=body.leads_nuevos,
                 seguimientos=body.seguimientos,
                 outbounds=body.outbounds,
+                formularios=body.formularios,
                 dia_bueno_malo=_notas_str(body.dia_bueno_malo),
             )
             r.flush()
