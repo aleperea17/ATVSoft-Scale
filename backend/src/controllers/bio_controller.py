@@ -9,6 +9,7 @@ from pony.orm import ObjectNotFound, db_session
 from src.models import ApiConnection, Lead as LeadEntity
 from src.schemas import BioLeadResponse, BioLeadStatusPatchRequest, BioLeadsListResponse, BioMetricsResponse, BioViaOptionsResponse
 from src.services.company_config_service import company_today
+from src.services.lead_agenda_utils import lead_counts_as_agenda
 from src.services.lead_statuses_services import status_counts_as_cierre
 
 router = APIRouter(prefix="/api/bio", tags=["bio"], redirect_slashes=False)
@@ -205,7 +206,7 @@ def bio_metrics(
     rows = _rows_for_user_month(uid, month_key)
 
     total = len(rows)
-    agendaron = sum(1 for r in rows if r.agendo is not None)
+    agendaron = sum(1 for r in rows if lead_counts_as_agenda(r))
     cerrados = sum(1 for r in rows if _is_cerrado(r))
     respondio_auto_n = sum(1 for r in rows if r.respondio_auto is True)
 

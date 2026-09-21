@@ -25,6 +25,7 @@ from src.services.programs_services import (
     build_program_norm_price_map,
     program_price_usd_for_prog_raw,
 )
+from src.services.lead_agenda_utils import lead_counts_as_agenda, lead_is_cuota_plazo
 from src.services.lead_statuses_services import default_lead_status_name
 from src.services.call_report_service import (
     analyze_call_report,
@@ -314,6 +315,14 @@ def _to_lead_out(
         ingresos_rango=(row.ingresos_rango or "").strip() or None,
         formulario=(row.formulario or "").strip() or None,
         fecha_seguimiento_pago=fsp_s,
+        es_cuota_plazo=bool(getattr(row, "es_cuota_plazo", False)),
+        lead_origen_id=(
+            int(row.lead_origen_id) if getattr(row, "lead_origen_id", None) is not None else None
+        ),
+        nro_plazo=(int(row.nro_plazo) if getattr(row, "nro_plazo", None) is not None else None),
+        calendly_account_key=(
+            (getattr(row, "calendly_account_key", None) or "").strip().casefold() or None
+        ),
         compromiso=None,
         urgencia=None,
         disposicion_invertir=None,
@@ -546,6 +555,7 @@ def leads_sin_punto_agenda(
             if int(r.user_id) == uid
             and r.agendo is not None
             and not (r.punto_agenda or "").strip()
+            and not lead_is_cuota_plazo(r)
         ]
         rows = [
             r
@@ -577,6 +587,20 @@ def leads_llamadas_hoy(
     return LlamadasHoyOut(**payload)
 
 
+@router.post("/generar-cuotas-plazo")
+def generar_cuotas_plazo(
+    user_id: Annotated[str, Depends(require_user_id)],
+) -> dict:
+    """Corre el job de plazos para el usuario (pruebas locales; el cron diario es a las 00:15)."""
+    try:
+        uid = int(user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="user_id inválido") from e
+    from src.services.plazos_pago_service import generate_plazos_pago
+
+    return generate_plazos_pago(user_id=uid)
+
+
 @router.get("/metrics", response_model=LeadsMetricsOut)
 def leads_metrics(
     user_id: Annotated[str, Depends(require_user_id)],
@@ -606,7 +630,7 @@ def leads_metrics(
                 if (mb := _lead_month_ar(r)) is not None and mb == (y, mn)
             ]
         total = len(rows)
-        agendaron = sum(1 for r in rows if r.agendo is not None)
+        agendaron = sum(1 for r in rows if lead_counts_as_agenda(r))
         cash_total = sum(float(r.pago or 0) for r in rows)
     cash_por_chat = (cash_total / total) if total else 0.0
     return LeadsMetricsOut(
@@ -738,6 +762,10 @@ def patch_lead(
                 if parsed_fsp is None:
                     raise HTTPException(status_code=400, detail="fecha_seguimiento_pago inválida (YYYY-MM-DD).")
                 row.fecha_seguimiento_pago = parsed_fsp
+        if "calendly_account_key" in data:
+            row.calendly_account_key = (
+                str(data["calendly_account_key"] or "").strip().casefold()
+            )
 
         _sync_dias_para_agendar(row)
 

@@ -63,6 +63,11 @@ export type Lead = {
   formulario?: string | null
   /** YYYY-MM-DD seguimiento de pago. */
   fecha_seguimiento_pago?: string | null
+  es_cuota_plazo?: boolean | null
+  lead_origen_id?: number | null
+  nro_plazo?: number | null
+  /** Cuenta Calendly del booking: clienta | closer. */
+  calendly_account_key?: string | null
   /** Días desde 1er contacto hasta formulario Calendly (API calculado). */
   dias_agendamiento: number | null
   ingresos_mensuales: number
@@ -173,6 +178,16 @@ export function buildColumns(
       defaultVisible: true,
     },
     { key: 'origin', label: 'Origen', width: 200, type: 'select', editable: true, options: [...ORIGIN_OPTIONS], colors: ORIGIN_COLORS, defaultVisible: true },
+    {
+      key: 'calendly_account_key',
+      label: 'Calendly',
+      width: 110,
+      type: 'select',
+      editable: true,
+      options: ['', 'clienta', 'closer'],
+      colors: { clienta: '#38BDF8', closer: '#A855F7' },
+      defaultVisible: true,
+    },
     // entry_funnel (keyword) no se muestra en esta vista
     { key: 'agenda_point', label: 'Pto agenda', width: 160, type: 'badge', editable: false, options: [''], colors: {}, defaultVisible: true },
     { key: 'entry_channel', label: '1er ingreso embudo', width: 180, type: 'badge', editable: false, options: [''], colors: {}, defaultVisible: false },

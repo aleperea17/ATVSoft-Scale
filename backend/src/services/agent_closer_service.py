@@ -8,6 +8,8 @@ from pony.orm import db_session
 
 from src.models import Lead
 from src.services.company_config_service import company_now, company_today
+from src.services.lead_agenda_utils import lead_is_cuota_plazo
+from src.services.lead_statuses_services import resolve_status_flags
 
 
 def _naive_now_company() -> datetime:
@@ -51,6 +53,9 @@ def _llamada_item(l: Lead) -> dict:
 
     fallback = default_lead_status_name(int(l.user_id))
     status = (l.status or l.estado or fallback).strip() or fallback
+    flags = resolve_status_flags(int(l.user_id), status)
+    fsp = getattr(l, "fecha_seguimiento_pago", None)
+    nro = getattr(l, "nro_plazo", None)
     return {
         "id": int(l.id),
         "hora": _fmt_hora(l.call),
@@ -64,6 +69,10 @@ def _llamada_item(l: Lead) -> dict:
         "programada_ofrecido_llamada": (l.programada_ofrecido_llamada or "").strip(),
         "calificacion_llamada": (getattr(l, "calificacion_llamada", None) or "").strip(),
         "notes": (l.notas or "").strip(),
+        "fecha_seguimiento_pago": fsp.isoformat() if fsp is not None else None,
+        "requires_followup_date": bool(flags.get("requires_followup_date")),
+        "es_cuota_plazo": lead_is_cuota_plazo(l),
+        "nro_plazo": int(nro) if nro is not None else None,
     }
 
 
@@ -74,7 +83,9 @@ def list_proximas_llamadas(user_id: int, ventana: int) -> dict:
     rows = [
         l
         for l in _leads_with_call(user_id)
-        if ahora <= l.call <= limite and not bool(l.recordatorio_enviado)
+        if ahora <= l.call <= limite
+        and not bool(l.recordatorio_enviado)
+        and not lead_is_cuota_plazo(l)
     ]
     resultado = [
         {

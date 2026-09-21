@@ -210,6 +210,21 @@ function agendoEnSelectOptions(lead: Lead): string[] {
   return base
 }
 
+function formatCalendlyAccountKey(raw: string | null | undefined): string {
+  const k = raw != null ? String(raw).trim().toLowerCase() : ''
+  if (!k) return '—'
+  if (k === 'clienta') return 'Clienta'
+  if (k === 'closer') return 'Closer'
+  return k
+}
+
+function calendlyAccountSelectOptions(lead: Lead, colOptions: string[]): string[] {
+  const v = String(lead.calendly_account_key || '').trim().toLowerCase()
+  const base = [...colOptions]
+  if (v && !base.includes(v)) base.push(v)
+  return base
+}
+
 function originDisplayValue(lead: Lead): string {
   const o = lead.origin
   if (o != null && String(o).trim() !== '') return String(o).trim()
@@ -1658,9 +1673,16 @@ function LeadsTableCell({
 
   if (readOnly) {
     if (col.key === 'client_name') {
+      const nro = Number(lead.nro_plazo) || 0
+      const showPlazo = Boolean(lead.es_cuota_plazo) && nro > 0
       return (
-        <span className="text-[13px] font-medium truncate block text-[var(--text)]">
-          {String(value || '—')}
+        <span className="flex min-w-0 items-center gap-1.5 text-[13px] font-medium text-[var(--text)]">
+          <span className="truncate">{String(value || '—')}</span>
+          {showPlazo ? (
+            <span className="flex-shrink-0 rounded-full border border-[var(--green)]/30 bg-[var(--green)]/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[var(--green)]">
+              Plazo {nro}
+            </span>
+          ) : null}
         </span>
       )
     }
@@ -1710,7 +1732,11 @@ function LeadsTableCell({
     if (col.type === 'select') {
       const color = col.colors?.[String(value)] || '#888'
       const selectLabel =
-        col.key === 'agendo_en' ? formatAgendoEnForDisplay(String(value || '')) : String(value || '—')
+        col.key === 'agendo_en'
+          ? formatAgendoEnForDisplay(String(value || ''))
+          : col.key === 'calendly_account_key'
+            ? formatCalendlyAccountKey(String(value || ''))
+            : String(value || '—')
       return (
         <span
           className="inline-flex h-6 max-w-full items-center justify-center rounded-full px-2.5 text-[11px] font-semibold leading-none"
@@ -1799,7 +1825,9 @@ function LeadsTableCell({
           ? originSelectOptions(lead)
           : col.key === 'agendo_en'
             ? agendoEnSelectOptions(lead)
-            : col.key === 'setter' || col.key === 'closer'
+            : col.key === 'calendly_account_key'
+              ? calendlyAccountSelectOptions(lead, col.options || ['', 'clienta', 'closer'])
+              : col.key === 'setter' || col.key === 'closer'
               ? teamRoleSelectOptions(lead, col.key, col.options!)
               : col.key === 'program_offered'
                 ? programOfferedSelectOptions(lead, 'program_offered', col.options!)
@@ -1819,7 +1847,15 @@ function LeadsTableCell({
         >
           {opts.map((o) => (
             <option key={o} value={o}>
-              {col.key === 'agendo_en' ? formatAgendoEnForDisplay(o) : o === '' ? '—' : o}
+              {col.key === 'agendo_en'
+                ? formatAgendoEnForDisplay(o)
+                : col.key === 'calendly_account_key'
+                  ? o === ''
+                    ? '—'
+                    : formatCalendlyAccountKey(o)
+                  : o === ''
+                    ? '—'
+                    : o}
             </option>
           ))}
         </select>
@@ -1947,12 +1983,21 @@ function LeadsTableCell({
 
   // Name column
   if (col.key === 'client_name') {
+    const nro = Number(lead.nro_plazo) || 0
+    const showPlazo = Boolean(lead.es_cuota_plazo) && nro > 0
     return (
-      <span
-        onClick={onStartEdit}
-        className="text-[13px] font-medium cursor-pointer hover:text-[var(--accent)] transition-colors truncate block"
-      >
-        {String(value || '—')}
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span
+          onClick={onStartEdit}
+          className="text-[13px] font-medium cursor-pointer hover:text-[var(--accent)] transition-colors truncate"
+        >
+          {String(value || '—')}
+        </span>
+        {showPlazo ? (
+          <span className="flex-shrink-0 rounded-full border border-[var(--green)]/30 bg-[var(--green)]/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[var(--green)]">
+            Plazo {nro}
+          </span>
+        ) : null}
       </span>
     )
   }
@@ -1979,7 +2024,9 @@ function LeadsTableCell({
         ? originSelectOptions(lead)
         : col.key === 'agendo_en'
           ? agendoEnSelectOptions(lead)
-          : col.options!
+          : col.key === 'calendly_account_key'
+            ? calendlyAccountSelectOptions(lead, col.options || ['', 'clienta', 'closer'])
+            : col.options!
     const color = col.colors?.[String(value)] || '#888'
     return (
       <span
@@ -1992,7 +2039,11 @@ function LeadsTableCell({
           style={{ color }}>
           {opts.map((s) => (
             <option key={s} value={s}>
-              {col.key === 'agendo_en' ? formatAgendoEnForDisplay(s) : s}
+              {col.key === 'agendo_en'
+                ? formatAgendoEnForDisplay(s)
+                : col.key === 'calendly_account_key'
+                  ? formatCalendlyAccountKey(s)
+                  : s}
             </option>
           ))}
         </select>

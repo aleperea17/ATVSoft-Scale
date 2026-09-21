@@ -99,6 +99,13 @@ export async function getAdminDailyCalls(
       programada_ofrecido_llamada: (row.programada_ofrecido_llamada || '').trim(),
       payment: Number(row.payment) || 0,
       owed: Number(row.owed) || 0,
+      notes: String((row as { notes?: string }).notes ?? '').trim(),
+      fecha_seguimiento_pago: (row as { fecha_seguimiento_pago?: string | null }).fecha_seguimiento_pago
+        ? String((row as { fecha_seguimiento_pago?: string }).fecha_seguimiento_pago).slice(0, 10)
+        : null,
+      requires_followup_date: Boolean((row as { requires_followup_date?: boolean }).requires_followup_date),
+      es_cuota_plazo: Boolean((row as { es_cuota_plazo?: boolean }).es_cuota_plazo),
+      nro_plazo: (row as { nro_plazo?: number | null }).nro_plazo ?? null,
     }
   })
 

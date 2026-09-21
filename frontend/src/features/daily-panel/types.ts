@@ -11,6 +11,10 @@ export type DailyCall = {
   payment: number
   owed: number
   notes: string
+  fecha_seguimiento_pago: string | null
+  requires_followup_date: boolean
+  es_cuota_plazo: boolean
+  nro_plazo: number | null
 }
 
 export type ManualCallInput = {

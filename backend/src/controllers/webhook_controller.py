@@ -1,3 +1,4 @@
+import logging
 import re
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request
@@ -6,13 +7,29 @@ from pony.orm import db_session
 from src.env_public import manychat_webhook_token
 from src.lead_display_utils import compute_dias_para_agendar
 from src.models import ApiConnection, Lead, ReelContent
+from src.services.calendly_connection_resolve import (
+    extract_calendly_host_uris,
+    match_calendly_connection,
+)
 from src.services.calendly_event_type_filter import (
     extract_event_type_uri,
     is_event_type_allowed,
 )
+from src.services.calendly_webhook_service import (
+    backfill_calendly_user_uris,
+    connections_missing_calendly_user_uri,
+)
+from src.services.lead_agenda_utils import lead_is_cuota_plazo
 from src.services.lead_statuses_services import booking_lead_status_name
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"], redirect_slashes=False)
+logger = logging.getLogger(__name__)
+
+
+def _calendly_account_key_of(conn: ApiConnection | None) -> str:
+    if conn is None:
+        return ""
+    return (str(getattr(conn, "account_key", "") or "").strip().casefold()) or "clienta"
 
 
 def _norm_kw(s: str) -> str:
@@ -461,7 +478,11 @@ def _find_lead_for_calendly(user_id: int, display_name: str, ig_hint: str) -> Le
     """Misma cuenta: prioriza coincidencia por IG, luego por nombre (normalizado)."""
     nkey = _norm_name_for_match(display_name)
     ig_key = _norm_ig(ig_hint)
-    rows = [r for r in list(Lead.select()) if int(r.user_id) == user_id]
+    rows = [
+        r
+        for r in list(Lead.select())
+        if int(r.user_id) == user_id and not lead_is_cuota_plazo(r)
+    ]
 
     def _ts(row: Lead) -> float:
         return row.created_at.timestamp() if row.created_at else 0.0
@@ -486,13 +507,18 @@ async def calendly_webhook(request: Request) -> dict[str, str]:
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid request body") from exc
 
-    payload = body
-    print(f"[calendly webhook] payload: {payload}")
-
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="Invalid request body")
 
     event = str(body.get("event") or "").strip()
+    inner_payload = _calendly_inner_payload(body)
+    invitee_uri = str(inner_payload.get("uri") or "").strip()
+    logger.info(
+        "calendly webhook event=%s invitee=%s",
+        event or "-",
+        invitee_uri.split("/")[-1] if invitee_uri else "-",
+    )
+
     if event != "invitee.created":
         return {"status": "ok"}
 
@@ -534,6 +560,8 @@ async def calendly_webhook(request: Request) -> dict[str, str]:
     start_raw_label = str(start_raw) if start_raw is not None else ""
     form_completed_at = _calendly_webhook_received_at(flat, inner_payload)
     form_fields = _extract_calendly_form_fields(flat, inner_payload)
+    scheduled = flat.get("scheduled_event") if isinstance(flat.get("scheduled_event"), dict) else None
+    host_uris = extract_calendly_host_uris(inner_payload, flat, scheduled)
 
     with db_session:
         calendly_conns = [
@@ -547,9 +575,34 @@ async def calendly_webhook(request: Request) -> dict[str, str]:
                 status_code=404,
                 detail="No hay conexión ApiConnection con platform=calendly.",
             )
-        conn0 = calendly_conns[0]
-        user_id = int(conn0.user_id)
-        creds = conn0.credentials if isinstance(conn0.credentials, dict) else {}
+        missing_uri = connections_missing_calendly_user_uri(calendly_conns)
+        matched = match_calendly_connection(calendly_conns, host_uris)
+        matched_id = int(matched.id) if matched is not None else None
+
+    if matched_id is None and missing_uri:
+        backfill_calendly_user_uris(missing_uri)
+
+    with db_session:
+        calendly_conns = [
+            c
+            for c in list(ApiConnection.select())
+            if str(c.platform or "").strip().casefold() == "calendly"
+        ]
+        calendly_conns.sort(key=lambda c: int(c.id))
+        if matched_id is not None:
+            matched = next((c for c in calendly_conns if int(c.id) == matched_id), None)
+        else:
+            matched = match_calendly_connection(calendly_conns, host_uris)
+        if matched is None:
+            return {
+                "status": "ok",
+                "skipped": "no_matching_calendly_user",
+                "host_uris": host_uris,
+            }
+
+        user_id = int(matched.user_id)
+        creds = matched.credentials if isinstance(matched.credentials, dict) else {}
+        account_key = _calendly_account_key_of(matched)
         event_type_uri = extract_event_type_uri(inner_payload, flat)
         if not is_event_type_allowed(creds, event_type_uri):
             return {"status": "ok", "skipped": "event_type"}
@@ -563,6 +616,7 @@ async def calendly_webhook(request: Request) -> dict[str, str]:
             row.agendo_en = "Chat"
             row.status = booking
             row.estado = booking
+            row.calendly_account_key = account_key
             if display_name:
                 row.nombre = display_name
             if email:
@@ -598,6 +652,7 @@ async def calendly_webhook(request: Request) -> dict[str, str]:
                 status=booking,
                 estado=booking,
                 notas="\n".join(notas_parts),
+                calendly_account_key=account_key,
             )
             _apply_calendly_form_fields(row, form_fields)
 

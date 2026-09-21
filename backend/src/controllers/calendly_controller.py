@@ -20,10 +20,15 @@ from src.controllers.webhook_controller import (
     _merge_calendly_email_notas,
     _parse_calendly_start_time,
 )
+from src.lead_display_utils import compute_dias_para_agendar
+from src.models import ApiConnection, Lead
 from src.services.calendly_event_type_filter import (
     extract_event_type_uri,
     is_event_type_allowed,
 )
+from src.services.calendly_webhook_service import persist_calendly_user_uri_if_missing
+from src.services.lead_agenda_utils import lead_is_cuota_plazo
+from src.services.lead_statuses_services import booking_lead_status_name
 
 router = APIRouter(prefix="/calendly", tags=["calendly"], redirect_slashes=False)
 
@@ -39,6 +44,10 @@ CALENDLY_AUTO_INTERVAL_HOURS = 6
 
 class CalendlySyncRequest(BaseModel):
     month: str | None = Field(default=None, description="YYYY-MM opcional para filtrar eventos")
+    account_key: str | None = Field(
+        default=None,
+        description='Cuenta Calendly: "clienta", "closer", etc. Si omite, sincroniza todas.',
+    )
 
 
 class CalendlyRateLimitError(Exception):
@@ -108,6 +117,8 @@ def _find_lead_by_email(user_id: int, email: str) -> Lead | None:
         return None
     matches: list[Lead] = []
     for row in _rows_for_user(user_id):
+        if lead_is_cuota_plazo(row):
+            continue
         stored_email = (row.email or "").strip()
         stored_notes = _email_from_notas(row.notas)
         if (stored_email and stored_email.casefold() == key) or (
@@ -259,15 +270,43 @@ def _event_is_newer_than(event: dict[str, Any], since: datetime | None) -> bool:
     return activity > since
 
 
-def _load_calendly_connection(uid: int) -> tuple[dict[str, Any], datetime | None]:
+def _calendly_rows_for_user(uid: int) -> list[ApiConnection]:
+    rows = [
+        c
+        for c in list(ApiConnection.select())
+        if int(c.user_id) == uid and str(c.platform or "").strip().casefold() == "calendly"
+    ]
+    rows.sort(key=lambda c: (str(getattr(c, "account_key", "") or ""), int(c.id)))
+    return rows
+
+
+def _pick_calendly_row(uid: int, account_key: str | None = None) -> ApiConnection:
+    rows = _calendly_rows_for_user(uid)
+    if not rows:
+        raise HTTPException(
+            status_code=400,
+            detail='No hay conexión Calendly. Configurá la plataforma "calendly" en Conexiones API.',
+        )
+    if account_key is None or not str(account_key).strip():
+        return rows[0]
+    key = str(account_key).strip().casefold()
+    for row in rows:
+        ak = str(getattr(row, "account_key", "") or "").casefold()
+        if ak == key or (key == "clienta" and ak in ("", "clienta")):
+            return row
+    raise HTTPException(
+        status_code=404,
+        detail=f'No hay conexión Calendly con account_key="{account_key}".',
+    )
+
+
+def _load_calendly_connection(
+    uid: int,
+    account_key: str | None = None,
+) -> tuple[int, str, dict[str, Any], datetime | None]:
+    """Devuelve (connection_id, account_key, creds, last_sync)."""
     with db_session:
-        try:
-            conn = ApiConnection.get(user_id=uid, platform="calendly")
-        except ObjectNotFound:
-            raise HTTPException(
-                status_code=400,
-                detail='No hay conexión Calendly. Configurá la plataforma "calendly" en Conexiones API.',
-            )
+        conn = _pick_calendly_row(uid, account_key=account_key)
         creds = conn.credentials if isinstance(conn.credentials, dict) else {}
         api_key = str(creds.get("api_key") or "").strip()
         if not api_key:
@@ -278,14 +317,30 @@ def _load_calendly_connection(uid: int) -> tuple[dict[str, Any], datetime | None
         last_sync = conn.last_sync_at
         if last_sync is not None and last_sync.tzinfo is not None:
             last_sync = last_sync.replace(tzinfo=None)
-        return dict(creds), last_sync
+        ak = str(getattr(conn, "account_key", "") or "") or "clienta"
+        return int(conn.id), ak, dict(creds), last_sync
 
 
-def _set_calendly_last_check(uid: int, *, has_pending: bool) -> None:
+def _list_calendly_connection_targets(uid: int) -> list[tuple[int, str]]:
+    """Lista (connection_id, account_key) con PAT para sync multi-cuenta."""
+    with db_session:
+        out: list[tuple[int, str]] = []
+        for row in _calendly_rows_for_user(uid):
+            creds = row.credentials if isinstance(row.credentials, dict) else {}
+            if not str(creds.get("api_key") or "").strip():
+                continue
+            ak = str(getattr(row, "account_key", "") or "") or "clienta"
+            out.append((int(row.id), ak))
+        return out
+
+
+def _set_calendly_last_check(connection_id: int, *, has_pending: bool) -> None:
     with db_session:
         try:
-            conn = ApiConnection.get(user_id=uid, platform="calendly")
+            conn = ApiConnection.get(id=connection_id)
         except ObjectNotFound:
+            return
+        if conn is None:
             return
         creds = dict(conn.credentials) if isinstance(conn.credentials, dict) else {}
         now = datetime.utcnow()
@@ -295,9 +350,9 @@ def _set_calendly_last_check(uid: int, *, has_pending: bool) -> None:
         conn.updated_at = now
 
 
-def check_calendly_pending(uid: int) -> dict[str, Any]:
+def check_calendly_pending(uid: int, account_key: str | None = None) -> dict[str, Any]:
     """Revisa Calendly (1 página de eventos) sin traer invitees ni escribir leads."""
-    creds, last_sync = _load_calendly_connection(uid)
+    conn_id, ak, creds, last_sync = _load_calendly_connection(uid, account_key=account_key)
     api_key = str(creds.get("api_key") or "").strip()
     headers = {"Authorization": f"Bearer {api_key}"}
 
@@ -308,14 +363,22 @@ def check_calendly_pending(uid: int) -> dict[str, Any]:
         org_uri = str(resource.get("current_organization") or "").strip()
         if not user_uri:
             raise HTTPException(status_code=502, detail="Calendly no devolvió current_user.uri.")
+        persist_calendly_user_uri_if_missing(
+            conn_id,
+            user_uri,
+            user_email=str(resource.get("email") or ""),
+            user_name=str(resource.get("name") or ""),
+        )
 
         if last_sync is None:
-            _set_calendly_last_check(uid, has_pending=True)
+            _set_calendly_last_check(conn_id, has_pending=True)
             return {
                 "has_pending": True,
                 "reason": "never_synced",
                 "last_sync_at": None,
                 "events_scanned": 0,
+                "account_key": ak,
+                "connection_id": conn_id,
             }
 
         events = _fetch_scheduled_events(
@@ -333,13 +396,15 @@ def check_calendly_pending(uid: int) -> dict[str, Any]:
             and is_event_type_allowed(creds, extract_event_type_uri(e))
         ]
         has_pending = len(pending_events) > 0
-        _set_calendly_last_check(uid, has_pending=has_pending)
+        _set_calendly_last_check(conn_id, has_pending=has_pending)
         return {
             "has_pending": has_pending,
             "reason": "new_events" if has_pending else "up_to_date",
             "last_sync_at": last_sync.isoformat() + "Z",
             "events_scanned": len(events),
             "pending_events": len(pending_events),
+            "account_key": ak,
+            "connection_id": conn_id,
         }
 
 
@@ -384,11 +449,13 @@ def _apply_invitee_to_lead(
     call_at: datetime | None,
     agendo_at: datetime | None,
     form_fields: dict[str, str] | None = None,
+    calendly_account_key: str | None = None,
 ) -> str:
     """Returns 'created' or 'updated'."""
     display_name = name.strip() or (email.split("@")[0] if email else "Invitado Calendly")
     row = _find_lead_by_email(user_id, email) if email else None
     fields = form_fields or {}
+    account_key = (calendly_account_key or "").strip().casefold()
 
     if row is not None:
         if display_name:
@@ -404,6 +471,8 @@ def _apply_invitee_to_lead(
         row.status = booking
         row.estado = booking
         row.agendo_en = "Calendly"
+        if account_key:
+            row.calendly_account_key = account_key
         _apply_calendly_form_fields(row, fields)
         row.dias_para_agendar = compute_dias_para_agendar(row.primer_contacto, row.agendo)
         return "updated"
@@ -425,6 +494,7 @@ def _apply_invitee_to_lead(
         status=booking,
         estado=booking,
         agendo_en="Calendly",
+        calendly_account_key=account_key,
     )
     _apply_calendly_form_fields(row, fields)
     return "created"
@@ -433,22 +503,19 @@ def _apply_invitee_to_lead(
 @router.get("/auto-sync-status")
 def calendly_auto_sync_status(
     user_id: Annotated[str, Depends(require_user_id)],
+    account_key: Annotated[str | None, Query()] = None,
 ):
     """Estado del auto-sync (sin pegarle a Calendly)."""
     uid = _uid_int(user_id)
     with db_session:
-        try:
-            conn = ApiConnection.get(user_id=uid, platform="calendly")
-        except ObjectNotFound:
-            raise HTTPException(
-                status_code=400,
-                detail='No hay conexión Calendly. Configurá la plataforma "calendly" en Conexiones API.',
-            )
+        conn = _pick_calendly_row(uid, account_key=account_key)
         creds = conn.credentials if isinstance(conn.credentials, dict) else {}
         last_sync = conn.last_sync_at
         last_check_at = str(creds.get("last_check_at") or "").strip() or None
         last_check_has_pending = str(creds.get("last_check_has_pending") or "").strip() == "1"
         has_key = bool(str(creds.get("api_key") or "").strip())
+        ak = str(getattr(conn, "account_key", "") or "") or "clienta"
+        conn_id = int(conn.id)
 
     next_run: str | None = None
     try:
@@ -471,17 +538,20 @@ def calendly_auto_sync_status(
         "last_check_at": last_check_at,
         "last_check_has_pending": last_check_has_pending,
         "next_run_at": next_run,
+        "account_key": ak,
+        "connection_id": conn_id,
     }
 
 
 @router.get("/check-pending")
 def calendly_check_pending(
     user_id: Annotated[str, Depends(require_user_id)],
+    account_key: Annotated[str | None, Query()] = None,
 ):
     """Consulta liviana a Calendly: ¿hay eventos nuevos desde la última sync?"""
     uid = _uid_int(user_id)
     try:
-        return check_calendly_pending(uid)
+        return check_calendly_pending(uid, account_key=account_key)
     except CalendlyRateLimitError:
         return JSONResponse(status_code=429, content={"error": _RATE_LIMIT_MESSAGE})
 
@@ -494,19 +564,26 @@ def sync_calendly(
 ):
     uid = _uid_int(user_id)
     sync_month = _resolve_sync_month(body, month)
+    account_key = body.account_key if body is not None else None
     try:
-        return _run_calendly_sync(uid, month=sync_month, only_newer_than_last_sync=False)
+        return _run_calendly_sync(
+            uid,
+            month=sync_month,
+            only_newer_than_last_sync=False,
+            account_key=account_key,
+        )
     except CalendlyRateLimitError:
         return JSONResponse(status_code=429, content={"error": _RATE_LIMIT_MESSAGE})
 
 
-def _run_calendly_sync(
+def _run_calendly_sync_one(
     uid: int,
     *,
+    account_key: str,
     month: str | None = None,
     only_newer_than_last_sync: bool = False,
 ) -> dict[str, Any]:
-    creds, last_sync = _load_calendly_connection(uid)
+    conn_id, ak, creds, last_sync = _load_calendly_connection(uid, account_key=account_key)
     api_key = str(creds.get("api_key") or "").strip()
     headers = {"Authorization": f"Bearer {api_key}"}
     since = last_sync if only_newer_than_last_sync else None
@@ -521,6 +598,12 @@ def _run_calendly_sync(
         org_uri = str(resource.get("current_organization") or "").strip()
         if not user_uri:
             raise HTTPException(status_code=502, detail="Calendly no devolvió current_user.uri.")
+        persist_calendly_user_uri_if_missing(
+            conn_id,
+            user_uri,
+            user_email=str(resource.get("email") or ""),
+            user_name=str(resource.get("name") or ""),
+        )
 
         events = _fetch_scheduled_events(
             client,
@@ -578,14 +661,15 @@ def _run_calendly_sync(
             call_at=item["call_at"],
             agendo_at=item["agendo_at"],
             form_fields=item.get("form_fields") or {},
+            calendly_account_key=ak,
         )
         if result == "created":
             created += 1
         else:
             updated += 1
 
-    _touch_calendly_last_sync(uid)
-    _set_calendly_last_check(uid, has_pending=False)
+    _touch_calendly_last_sync(conn_id)
+    _set_calendly_last_check(conn_id, has_pending=False)
 
     synced = created + updated
     return {
@@ -595,28 +679,109 @@ def _run_calendly_sync(
         "month": month,
         "events_skipped": events_skipped,
         "only_newer": only_newer_than_last_sync,
+        "account_key": ak,
+        "connection_id": conn_id,
+    }
+
+
+def _run_calendly_sync(
+    uid: int,
+    *,
+    month: str | None = None,
+    only_newer_than_last_sync: bool = False,
+    account_key: str | None = None,
+) -> dict[str, Any]:
+    """Sync de una cuenta (account_key) o de todas las conexiones Calendly del usuario."""
+    if account_key is not None and str(account_key).strip():
+        return _run_calendly_sync_one(
+            uid,
+            account_key=str(account_key).strip(),
+            month=month,
+            only_newer_than_last_sync=only_newer_than_last_sync,
+        )
+
+    targets = _list_calendly_connection_targets(uid)
+    if not targets:
+        raise HTTPException(
+            status_code=400,
+            detail='No hay conexión Calendly. Configurá la plataforma "calendly" en Conexiones API.',
+        )
+
+    accounts: list[dict[str, Any]] = []
+    created = 0
+    updated = 0
+    events_skipped = 0
+    for _conn_id, ak in targets:
+        one = _run_calendly_sync_one(
+            uid,
+            account_key=ak,
+            month=month,
+            only_newer_than_last_sync=only_newer_than_last_sync,
+        )
+        accounts.append(one)
+        created += int(one.get("created") or 0)
+        updated += int(one.get("updated") or 0)
+        events_skipped += int(one.get("events_skipped") or 0)
+
+    return {
+        "synced": created + updated,
+        "created": created,
+        "updated": updated,
+        "month": month,
+        "events_skipped": events_skipped,
+        "only_newer": only_newer_than_last_sync,
+        "accounts": accounts,
     }
 
 
 def run_calendly_auto_sync_for_user(uid: int) -> dict[str, Any]:
-    """Check liviano → sync solo si hay eventos nuevos desde last_sync_at."""
-    try:
-        check = check_calendly_pending(uid)
-    except CalendlyRateLimitError:
-        return {"user_id": uid, "skipped": True, "reason": "rate_limit"}
-    except HTTPException as exc:
-        return {"user_id": uid, "skipped": True, "reason": str(exc.detail)}
+    """Por cada conexión Calendly: check liviano → sync solo si hay pendientes."""
+    targets = _list_calendly_connection_targets(uid)
+    if not targets:
+        return {"user_id": uid, "skipped": True, "reason": "no_connection"}
 
-    if not check.get("has_pending"):
-        return {
-            "user_id": uid,
-            "skipped": True,
-            "reason": "up_to_date",
-            "check": check,
-        }
+    accounts: list[dict[str, Any]] = []
+    any_synced = False
+    for _conn_id, ak in targets:
+        try:
+            check = check_calendly_pending(uid, account_key=ak)
+        except CalendlyRateLimitError:
+            accounts.append({"account_key": ak, "skipped": True, "reason": "rate_limit"})
+            continue
+        except HTTPException as exc:
+            accounts.append({"account_key": ak, "skipped": True, "reason": str(exc.detail)})
+            continue
 
-    result = _run_calendly_sync(uid, month=None, only_newer_than_last_sync=True)
-    return {"user_id": uid, "skipped": False, "check": check, "sync": result}
+        if not check.get("has_pending"):
+            accounts.append(
+                {"account_key": ak, "skipped": True, "reason": "up_to_date", "check": check}
+            )
+            continue
+
+        try:
+            result = _run_calendly_sync_one(
+                uid,
+                account_key=ak,
+                month=None,
+                only_newer_than_last_sync=True,
+            )
+        except CalendlyRateLimitError:
+            accounts.append(
+                {"account_key": ak, "skipped": True, "reason": "rate_limit", "check": check}
+            )
+            continue
+
+        any_synced = True
+        accounts.append(
+            {"account_key": ak, "skipped": False, "check": check, "sync": result}
+        )
+
+    return {
+        "user_id": uid,
+        "skipped": not any_synced,
+        "reason": "ok" if any_synced else "all_up_to_date_or_errors",
+        "accounts": accounts,
+    }
 
 
 def list_calendly_user_ids_with_token() -> list[int]:
@@ -627,18 +792,24 @@ def list_calendly_user_ids_with_token() -> list[int]:
                 {"platform": "calendly"},
             )
         )
+        seen: set[int] = set()
         out: list[int] = []
         for row in rows:
             creds = row.credentials if isinstance(row.credentials, dict) else {}
             if str(creds.get("api_key") or "").strip():
-                out.append(int(row.user_id))
+                uid = int(row.user_id)
+                if uid not in seen:
+                    seen.add(uid)
+                    out.append(uid)
         return out
 
 
 @db_session
-def _touch_calendly_last_sync(user_id: int) -> None:
+def _touch_calendly_last_sync(connection_id: int) -> None:
     try:
-        conn_row = ApiConnection.get(user_id=user_id, platform="calendly")
+        conn_row = ApiConnection.get(id=connection_id)
+        if conn_row is None:
+            return
         now = datetime.utcnow()
         conn_row.last_sync_at = now
         conn_row.updated_at = now

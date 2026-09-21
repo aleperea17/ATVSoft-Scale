@@ -180,7 +180,7 @@ class FeedPostsServices:
             if int(lead.user_id) != user_id:
                 continue
             ap = (lead.punto_agenda or "").strip()
-            if ap == token:
+            if ap == token and not bool(getattr(lead, "es_cuota_plazo", False)):
                 n += 1
         return n
 

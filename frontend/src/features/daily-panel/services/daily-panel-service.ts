@@ -17,6 +17,10 @@ type ApiDailyCallRow = {
   programada_ofrecido_llamada?: string
   calificacion_llamada?: string
   notes?: string
+  fecha_seguimiento_pago?: string | null
+  requires_followup_date?: boolean
+  es_cuota_plazo?: boolean
+  nro_plazo?: number | null
 }
 
 function normalizeCalificacion(raw: string | undefined): DailyCall['calificacion_llamada'] {
@@ -111,6 +115,12 @@ export async function getDailyCalls(
       payment: Number(row.payment) || 0,
       owed: Number(row.owed) || 0,
       notes: String(row.notes ?? '').trim(),
+      fecha_seguimiento_pago: row.fecha_seguimiento_pago
+        ? String(row.fecha_seguimiento_pago).slice(0, 10)
+        : null,
+      requires_followup_date: Boolean(row.requires_followup_date),
+      es_cuota_plazo: Boolean(row.es_cuota_plazo),
+      nro_plazo: row.nro_plazo == null ? null : Number(row.nro_plazo) || null,
     })
   }
 
@@ -301,6 +311,25 @@ export async function patchLeadNotes(leadId: number, notes: string): Promise<voi
       typeof raw === 'object' && raw && 'detail' in raw
         ? String((raw as { detail: unknown }).detail)
         : 'No se pudo guardar la nota.'
+    throw new Error(detail)
+  }
+}
+
+export async function patchLeadFechaSeguimientoPago(
+  leadId: number,
+  fecha: string | null,
+): Promise<void> {
+  const res = await apiFetch(`/leads/${encodeURIComponent(String(leadId))}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fecha_seguimiento_pago: fecha }),
+  })
+  const raw = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const detail =
+      typeof raw === 'object' && raw && 'detail' in raw
+        ? String((raw as { detail: unknown }).detail)
+        : 'No se pudo guardar el próximo pago.'
     throw new Error(detail)
   }
 }

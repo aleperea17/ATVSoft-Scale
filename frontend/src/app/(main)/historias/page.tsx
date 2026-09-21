@@ -509,10 +509,13 @@ export default function HistoriasPage() {
     const angulo = overrides?.angulo ?? formAngulos[0] ?? sec.angulo ?? ''
     const ctaText = overrides?.cta_text ?? form.cta ?? sec.cta_text ?? ''
     const cashGenerado =
-      overrides?.cash_generado ?? (() => {
+      overrides?.cash_generado ??
+      ((() => {
         const n = Number(String(form.cash ?? '').replace(',', '.'))
         return Number.isFinite(n) ? n : 0
-      })() || sec.cash_manual || 0
+      })() ||
+        sec.cash_manual ||
+        0)
     const chats = overrides?.chats ?? (Number(form.chats) || sec.chats || 0)
     const res = await apiFetch(`/stories/sequences/${sec.id}`, {
       method: 'PUT',

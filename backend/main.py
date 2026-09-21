@@ -44,6 +44,7 @@ from src.services.company_config_service import get_company_timezone_name, get_c
 from src.services.sync_scheduler_service import (
     CALENDLY_JOB_ID,
     CLOSER_DAILY_REPORT_JOB_ID,
+    PLAZOS_PAGO_JOB_ID,
     REELS_JOB_ID,
     REELS_NEW_SYNC_JOB_ID,
     STORIES_JOB_ID,
@@ -61,6 +62,7 @@ from src.services.sync_settings_service import (
 )
 from src.services.stories_service import StoriesService
 from src.services.closer_report_auto_service import generate_daily_reports_all_users
+from src.services.plazos_pago_service import generate_plazos_pago
 
 scheduler = AsyncIOScheduler()
 
@@ -175,15 +177,27 @@ async def auto_generate_closer_daily_reports() -> None:
         print(f"[scheduler] Error en auto_generate_closer_daily_reports: {e}")
 
 
+async def auto_generate_plazos_pago() -> None:
+    """Cuotas PLAZO PAGADO a las 00:15 (TZ empresa). Independiente de DISABLE_AUTO_SYNC."""
+    try:
+        result = generate_plazos_pago()
+        print(
+            f"[scheduler] Plazos de pago OK as_of={result.get('as_of')} "
+            f"created={result.get('created')} skipped={result.get('skipped')}"
+        )
+    except Exception as e:
+        print(f"[scheduler] Error en auto_generate_plazos_pago: {e}")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
     archivos = glob.glob(os.path.join(media_dir, "**/*.jpg"), recursive=True)
     print(f"[media] Archivos encontrados: {len(archivos)}")
     print(f"[media] Directorio: {media_dir}")
+    company_tz = get_company_tz()
+    tz_name = get_company_timezone_name()
     if auto_sync_enabled():
-        company_tz = get_company_tz()
-        tz_name = get_company_timezone_name()
         scheduler.add_job(
             auto_sync_stories,
             trigger=IntervalTrigger(minutes=DEFAULT_STORIES_INTERVAL_MINUTES),
@@ -217,7 +231,6 @@ async def lifespan(_: FastAPI):
         )
         bind_sync_scheduler(scheduler)
         apply_sync_schedules()
-        scheduler.start()
         print(
             f"[scheduler] Auto-sync historias cada {get_stories_interval_minutes()} min "
             f"(próximo job según APScheduler)"
@@ -237,8 +250,18 @@ async def lifespan(_: FastAPI):
     else:
         print(
             "[scheduler] Auto-sync DESACTIVADO (DISABLE_AUTO_SYNC=true). "
-            "Solo sincronización manual."
+            "Solo sincronización manual de contenido."
         )
+
+    scheduler.add_job(
+        auto_generate_plazos_pago,
+        trigger=CronTrigger(hour=0, minute=15, timezone=company_tz),
+        id=PLAZOS_PAGO_JOB_ID,
+        replace_existing=True,
+    )
+    if not scheduler.running:
+        scheduler.start()
+    print(f"[scheduler] Plazos de pago automático diario a las 00:15 ({tz_name})")
     yield
     scheduler.shutdown()
 

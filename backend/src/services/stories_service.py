@@ -84,7 +84,8 @@ def _count_agendas_for_sequence(user_id: int, sequence_db_id: int) -> int:
     tbl = Lead._table_ or "lead"
     sql = f"""COUNT(*) FROM {tbl} l
 WHERE l.user_id = $user_id
-AND trim(both from coalesce(l.punto_agenda, '')) = $tid"""
+AND trim(both from coalesce(l.punto_agenda, '')) = $tid
+AND coalesce(l.es_cuota_plazo, false) = false"""
     with db_session:
         rows = db.select(sql, globals(), {"user_id": user_id, "tid": tid})
     return int(rows[0]) if len(rows) > 0 else 0

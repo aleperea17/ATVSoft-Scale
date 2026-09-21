@@ -10,6 +10,7 @@ from pony.orm import db_session, flush
 from src.models import CloserReport, Lead, TeamMember
 from src.services.company_config_service import company_today
 from src.services.discord_service import DiscordServices
+from src.services.lead_agenda_utils import lead_counts_as_agenda, lead_is_cuota_plazo
 from src.services.lead_statuses_services import (
     default_lead_status_name,
     status_counts_as_cierre,
@@ -55,17 +56,18 @@ def leads_for_closer_on_date(user_id: int, fecha: date, closer_name: str) -> lis
 
 
 def aggregate_closer_metrics(leads: list[Lead]) -> dict[str, int | float]:
-    llamadas = len(leads)
+    reales = [lead for lead in leads if not lead_is_cuota_plazo(lead)]
+    llamadas = len(reales)
     shows = sum(
         1
-        for lead in leads
+        for lead in reales
         if not status_counts_as_no_show(int(lead.user_id), _lead_status(lead))
     )
     cierres = sum(
-        1 for lead in leads if status_counts_as_cierre(int(lead.user_id), _lead_status(lead))
+        1 for lead in reales if status_counts_as_cierre(int(lead.user_id), _lead_status(lead))
     )
-    calificados = sum(1 for lead in leads if _calificacion(lead) == "calificado")
-    descalificados = sum(1 for lead in leads if _calificacion(lead) == "descalificado")
+    calificados = sum(1 for lead in reales if _calificacion(lead) == "calificado")
+    descalificados = sum(1 for lead in reales if _calificacion(lead) == "descalificado")
     ingreso = sum(float(lead.pago or 0) for lead in leads)
     return {
         "llamadas_agendadas": llamadas,

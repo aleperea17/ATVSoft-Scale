@@ -9,14 +9,20 @@ from pony.orm import db_session
 from pydantic import BaseModel, Field
 from starlette.responses import Response
 
-from src.models import CloserReport, SeguimientoReport, SetterReport, TeamMember
+from src.models import CloserReport, Lead, SeguimientoReport, SetterReport, TeamMember
 from src.services.closer_report_auto_service import (
     generate_closer_report_for_member,
     generate_daily_reports_for_user,
     preview_closer_report,
 )
-from src.services.company_config_service import company_today
+from src.services.company_config_service import company_today, datetime_month_tuple
 from src.services.discord_service import DiscordServices
+from src.services.lead_agenda_utils import lead_is_cuota_plazo
+from src.services.lead_statuses_services import (
+    default_lead_status_name,
+    status_counts_as_cierre,
+    status_counts_as_no_show,
+)
 from src.team_reports_pdf import build_team_reports_pdf, fecha_iso_a_dd_mm_yyyy
 
 router = APIRouter(prefix="/api/team", tags=["team"], redirect_slashes=False)
@@ -845,6 +851,57 @@ def team_dashboard_daily(
     return out
 
 
+def _lead_effective_dt_for_month(row: Lead) -> datetime | None:
+    """Mismo criterio que GET /leads ?month=: call > agendo > fecha_bot > created_at."""
+    return row.call or row.agendo or row.fecha_bot or row.created_at
+
+
+def _norm_member_name(raw: str | None) -> str:
+    return (raw or "").strip().casefold()
+
+
+def _live_closer_month_stats(uid: int, year: int, month: int) -> dict[str, dict[str, float | int]]:
+    """Cierres/shows/calls/calif/ingreso en vivo desde Lead, indexado por nombre de closer."""
+    empty = {
+        "llamadas_agendadas": 0,
+        "shows": 0,
+        "cierres": 0,
+        "calificados": 0,
+        "descalificados": 0,
+        "ingreso": 0.0,
+    }
+    by_name: dict[str, dict[str, float | int]] = {}
+    for lead in list(Lead.select()):
+        if int(lead.user_id) != uid:
+            continue
+        mb = datetime_month_tuple(_lead_effective_dt_for_month(lead))
+        if mb != (year, month):
+            continue
+        key = _norm_member_name(lead.closer)
+        if not key:
+            continue
+        acc = by_name.setdefault(key, dict(empty))
+        acc["ingreso"] = float(acc["ingreso"]) + float(lead.pago or 0)
+        if lead_is_cuota_plazo(lead):
+            continue
+        # Mismo criterio de “tiene agenda” que el KPI en vivo de Ventas (call o agendo).
+        if lead.call is None and lead.agendo is None:
+            continue
+        acc["llamadas_agendadas"] = int(acc["llamadas_agendadas"]) + 1
+        fallback = default_lead_status_name(uid)
+        st = (lead.status or lead.estado or fallback).strip() or fallback
+        if not status_counts_as_no_show(uid, st):
+            acc["shows"] = int(acc["shows"]) + 1
+        if status_counts_as_cierre(uid, st):
+            acc["cierres"] = int(acc["cierres"]) + 1
+        cal = (getattr(lead, "calificacion_llamada", None) or "").strip().lower()
+        if cal == "calificado":
+            acc["calificados"] = int(acc["calificados"]) + 1
+        elif cal == "descalificado":
+            acc["descalificados"] = int(acc["descalificados"]) + 1
+    return by_name
+
+
 @router.get("/dashboard")
 def team_dashboard(
     month: str = Query(..., description="YYYY-MM"),
@@ -861,11 +918,7 @@ def team_dashboard(
             if r.user_id == uid and start <= r.fecha <= end
         ]
         total_conversaciones = sum(int(r.conversaciones) for r in setter_rows)
-        closer_rows = [
-            r
-            for r in list(CloserReport.select())
-            if r.user_id == uid and start <= r.fecha <= end
-        ]
+        live_closers = _live_closer_month_stats(uid, start.year, start.month)
 
         members_by_id = {m.id: m for m in _members_for_user(uid)}
 
@@ -879,25 +932,14 @@ def team_dashboard(
             acc["agendas"] += r.agendas
             acc["links_enviados"] += r.links_enviados
 
-        closer_totals: dict[int, dict[str, float | int]] = {}
-        for r in closer_rows:
-            acc = closer_totals.setdefault(
-                r.member_id,
-                {
-                    "llamadas_agendadas": 0,
-                    "shows": 0,
-                    "cierres": 0,
-                    "calificados": 0,
-                    "descalificados": 0,
-                    "ingreso": 0.0,
-                },
-            )
-            acc["llamadas_agendadas"] = int(acc["llamadas_agendadas"]) + r.llamadas_agendadas
-            acc["shows"] = int(acc["shows"]) + r.shows
-            acc["cierres"] = int(acc["cierres"]) + r.cierres
-            acc["calificados"] = int(acc["calificados"]) + r.calificados
-            acc["descalificados"] = int(acc["descalificados"]) + r.descalificados
-            acc["ingreso"] = float(acc["ingreso"]) + float(r.ingreso)
+        empty_closer = {
+            "llamadas_agendadas": 0,
+            "shows": 0,
+            "cierres": 0,
+            "calificados": 0,
+            "descalificados": 0,
+            "ingreso": 0.0,
+        }
 
         active_setters = [m for m in members_by_id.values() if m.activo and m.rol == "setter"]
         active_closers = [m for m in members_by_id.values() if m.activo and m.rol == "closer"]
@@ -909,17 +951,7 @@ def team_dashboard(
         cash_total = 0.0
         total_cierres_mes = 0
         for m in sorted(active_closers, key=lambda x: x.id):
-            t = closer_totals.get(
-                m.id,
-                {
-                    "llamadas_agendadas": 0,
-                    "shows": 0,
-                    "cierres": 0,
-                    "calificados": 0,
-                    "descalificados": 0,
-                    "ingreso": 0.0,
-                },
-            )
+            t = live_closers.get(_norm_member_name(m.nombre), dict(empty_closer))
             ing = float(t["ingreso"])
             ci = int(t["cierres"])
             cash_total += ing

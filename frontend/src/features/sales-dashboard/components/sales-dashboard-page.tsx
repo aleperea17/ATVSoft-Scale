@@ -1343,7 +1343,7 @@ function SemanalView({ curr }: { curr: VDData }) {
           <Bar data={{ labels: weeks, datasets: [{ data: curr.agendasByWeek, backgroundColor: 'rgba(245,158,11,0.25)', hoverBackgroundColor: '#F59E0B', borderRadius: 8, borderSkipped: false, barPercentage: 0.5, categoryPercentage: 0.7 }] }}
             options={{ responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.6)', font: { size: 11 } } }, y: { grid: { color: 'rgba(255,255,255,0.03)', drawTicks: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.4)', font: { size: 10 }, padding: 8, maxTicksLimit: 4 } } }, plugins: { tooltip: { backgroundColor: 'rgba(0,0,0,0.85)', padding: 10, cornerRadius: 8, displayColors: false } } }} />
         </ChartCard>
-        <ChartCard title="Ingresos por semana" value={formatCash(curr.ingresosByWeek.reduce((s, v) => s + v, 0))} subtitle="closer ventas + seguimiento">
+        <ChartCard title="Ingresos por semana" value={formatCash(curr.ingresosByWeek.reduce((s, v) => s + v, 0))} subtitle="Pagó en vivo (leads del mes)">
           <Bar data={{ labels: weeks, datasets: [{ data: curr.ingresosByWeek, backgroundColor: 'rgba(34,197,94,0.25)', hoverBackgroundColor: '#22C55E', borderRadius: 8, borderSkipped: false, barPercentage: 0.5, categoryPercentage: 0.7 }] }}
             options={{ responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.6)', font: { size: 11 } } }, y: { grid: { color: 'rgba(255,255,255,0.03)', drawTicks: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.4)', font: { size: 10 }, padding: 8, maxTicksLimit: 4, callback: (v: string | number) => formatCashAxisShort(v) } } }, plugins: { tooltip: { backgroundColor: 'rgba(0,0,0,0.85)', padding: 10, cornerRadius: 8, displayColors: false, callbacks: { label: (ctx: { parsed: { y: number | null } }) => formatCash(ctx.parsed.y ?? 0) } } } }} />
         </ChartCard>
@@ -1397,7 +1397,7 @@ function DiarioView({ curr, semana, setSemana }: { curr: VDData; semana: number;
     { label: 'Shows', data: shows, total: sumSh },
     { label: 'No Shows', data: noShowsD, total: sum(noShowsD) },
     { label: 'Cierres', data: cierres, total: sumCi },
-    { label: 'Ingresos (reportes)', data: ingresos, total: sumIng, fmt: formatCash },
+    { label: 'Ingresos (Pagó)', data: ingresos, total: sumIng, fmt: formatCash },
     { label: 'T. Agendamiento', data: tasaAgD, total: sumConv > 0 ? (sumAg / sumConv) * 100 : 0, fmt: fP },
     {
       label: 'Show Up Rate',
@@ -1456,7 +1456,7 @@ function DiarioView({ curr, semana, setSemana }: { curr: VDData; semana: number;
           <Bar data={{ labels: days, datasets: [{ data: agendas, backgroundColor: 'rgba(245,158,11,0.25)', hoverBackgroundColor: '#F59E0B', borderRadius: 6, borderSkipped: false, barPercentage: 0.6, categoryPercentage: 0.8 }] }}
             options={{ responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.6)', font: { size: 11 } } }, y: { grid: { color: 'rgba(255,255,255,0.03)', drawTicks: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.4)', font: { size: 10 }, padding: 8, maxTicksLimit: 4 } } }, plugins: { tooltip: { backgroundColor: 'rgba(0,0,0,0.85)', padding: 10, cornerRadius: 8, displayColors: false } } }} />
         </ChartCard>
-        <ChartCard title="Ingresos diarios" value={formatCash(ingresos.reduce((s, v) => s + v, 0))} subtitle="closer ventas + seguimiento">
+        <ChartCard title="Ingresos diarios" value={formatCash(ingresos.reduce((s, v) => s + v, 0))} subtitle="Pagó en vivo (leads del mes)">
           <Bar data={{ labels: days, datasets: [{ data: ingresos, backgroundColor: 'rgba(34,197,94,0.25)', hoverBackgroundColor: '#22C55E', borderRadius: 6, borderSkipped: false, barPercentage: 0.6, categoryPercentage: 0.8 }] }}
             options={{ responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.6)', font: { size: 11 } } }, y: { grid: { color: 'rgba(255,255,255,0.03)', drawTicks: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.4)', font: { size: 10 }, padding: 8, maxTicksLimit: 4, callback: (v: string | number) => formatCashAxisShort(v) } } }, plugins: { tooltip: { backgroundColor: 'rgba(0,0,0,0.85)', padding: 10, cornerRadius: 8, displayColors: false, callbacks: { label: (ctx: { parsed: { y: number | null } }) => formatCash(ctx.parsed.y ?? 0) } } } }} />
         </ChartCard>

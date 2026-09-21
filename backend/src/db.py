@@ -1512,6 +1512,98 @@ def _migrate_postgres_lead_fecha_seguimiento_pago() -> None:
         conn.close()
 
 
+def _migrate_postgres_lead_cuota_plazo() -> None:
+    """es_cuota_plazo, lead_origen_id, nro_plazo en Lead."""
+    if (config("DB_PROVIDER", default="") or "").strip().lower() != "postgres":
+        return
+    try:
+        import psycopg2
+    except ImportError:
+        return
+    try:
+        conn = psycopg2.connect(
+            user=config("DB_USER"),
+            password=config("DB_PASS"),
+            host=config("DB_HOST"),
+            dbname=config("DB_NAME"),
+        )
+    except Exception:
+        return
+    try:
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT table_name FROM information_schema.tables
+                WHERE table_schema = 'public' AND lower(table_name) = 'lead'
+                """
+            )
+            tr = cur.fetchone()
+            if not tr:
+                return
+            physical = tr[0]
+            sql_table = f'"{physical}"' if physical != physical.lower() else physical
+            for stmt in (
+                f"ALTER TABLE {sql_table} ADD COLUMN IF NOT EXISTS es_cuota_plazo BOOLEAN NOT NULL DEFAULT FALSE",
+                f"ALTER TABLE {sql_table} ADD COLUMN IF NOT EXISTS lead_origen_id INTEGER",
+                f"ALTER TABLE {sql_table} ADD COLUMN IF NOT EXISTS nro_plazo INTEGER",
+            ):
+                try:
+                    cur.execute(stmt)
+                except Exception:
+                    pass
+            try:
+                cur.execute(
+                    f"CREATE INDEX IF NOT EXISTS idx_lead_origen_id ON {sql_table} (lead_origen_id)"
+                )
+            except Exception:
+                pass
+    finally:
+        conn.close()
+
+
+def _migrate_postgres_lead_calendly_account_key() -> None:
+    """Cuenta Calendly (clienta/closer) que originó el booking del lead."""
+    if (config("DB_PROVIDER", default="") or "").strip().lower() != "postgres":
+        return
+    try:
+        import psycopg2
+    except ImportError:
+        return
+    try:
+        conn = psycopg2.connect(
+            user=config("DB_USER"),
+            password=config("DB_PASS"),
+            host=config("DB_HOST"),
+            dbname=config("DB_NAME"),
+        )
+    except Exception:
+        return
+    try:
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT table_name FROM information_schema.tables
+                WHERE table_schema = 'public' AND lower(table_name) = 'lead'
+                """
+            )
+            tr = cur.fetchone()
+            if not tr:
+                return
+            physical = tr[0]
+            sql_table = f'"{physical}"' if physical != physical.lower() else physical
+            try:
+                cur.execute(
+                    f"ALTER TABLE {sql_table} ADD COLUMN IF NOT EXISTS "
+                    f"calendly_account_key VARCHAR DEFAULT ''"
+                )
+            except Exception:
+                pass
+    finally:
+        conn.close()
+
+
 def _migrate_postgres_drop_company_config() -> None:
     """Scale opera en Europe/Madrid fijo: ya no hay tabla de config de TZ."""
     if (config("DB_PROVIDER", default="") or "").strip().lower() != "postgres":
@@ -1533,6 +1625,84 @@ def _migrate_postgres_drop_company_config() -> None:
         conn.autocommit = True
         with conn.cursor() as cur:
             cur.execute("DROP TABLE IF EXISTS company_config")
+    finally:
+        conn.close()
+
+
+def _migrate_postgres_apiconnection_account_key() -> None:
+    """Permite N conexiones Calendly por user: account_key + unique (user_id, platform, account_key)."""
+    if (config("DB_PROVIDER", default="") or "").strip().lower() != "postgres":
+        return
+    try:
+        import psycopg2
+    except ImportError:
+        return
+    try:
+        conn = psycopg2.connect(
+            user=config("DB_USER"),
+            password=config("DB_PASS"),
+            host=config("DB_HOST"),
+            dbname=config("DB_NAME"),
+        )
+    except Exception:
+        return
+    try:
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT table_name FROM information_schema.tables
+                WHERE table_schema = 'public' AND lower(table_name) = 'apiconnection'
+                """
+            )
+            tr = cur.fetchone()
+            if not tr:
+                return
+            physical = tr[0]
+            sql_table = f'"{physical}"' if physical != physical.lower() else physical
+            try:
+                cur.execute(
+                    f"ALTER TABLE {sql_table} ADD COLUMN IF NOT EXISTS "
+                    f"account_key VARCHAR NOT NULL DEFAULT ''"
+                )
+            except Exception:
+                pass
+            try:
+                cur.execute(
+                    f"UPDATE {sql_table} SET account_key = 'clienta' "
+                    f"WHERE lower(platform) = 'calendly' AND (account_key IS NULL OR account_key = '')"
+                )
+            except Exception:
+                pass
+            # Drop legacy unique (user_id, platform) if present
+            try:
+                cur.execute(
+                    """
+                    SELECT c.conname
+                    FROM pg_constraint c
+                    JOIN pg_class t ON c.conrelid = t.oid
+                    WHERE t.relname = lower(%s)
+                      AND c.contype = 'u'
+                    """,
+                    (physical,),
+                )
+                for (conname,) in cur.fetchall() or []:
+                    try:
+                        cur.execute(
+                            f'ALTER TABLE {sql_table} DROP CONSTRAINT IF EXISTS "{conname}"'
+                        )
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            try:
+                cur.execute(
+                    f"CREATE UNIQUE INDEX IF NOT EXISTS "
+                    f"apiconnection_user_platform_account_key "
+                    f"ON {sql_table} (user_id, platform, account_key)"
+                )
+            except Exception:
+                pass
     finally:
         conn.close()
 
@@ -1567,7 +1737,10 @@ def init_db() -> None:
     _migrate_postgres_weekly_report_feedback_marketing()
     _migrate_postgres_lead_formulario()
     _migrate_postgres_lead_fecha_seguimiento_pago()
+    _migrate_postgres_lead_cuota_plazo()
+    _migrate_postgres_lead_calendly_account_key()
     _migrate_postgres_drop_company_config()
+    _migrate_postgres_apiconnection_account_key()
     db.generate_mapping(create_tables=True)
     _migrate_agendo_en_iso_to_call()
     _migrate_agendo_en_default_chat_when_agendado()

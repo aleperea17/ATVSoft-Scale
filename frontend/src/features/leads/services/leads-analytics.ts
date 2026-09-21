@@ -11,6 +11,7 @@ import {
 export type LeadRow = Record<string, unknown> & {
   email?: string | null
   ingresos_rango?: string | null
+  es_cuota_plazo?: boolean | null
 }
 
 let _statusCatalog: LeadStatusCatalogItem[] | null = null
@@ -46,7 +47,7 @@ export type WeekMetrics = {
   conversaciones: number[]
   shows: number[]
   cierres: number[]
-  /** Cash por bucket: reportes closer ventas (`ingreso`) + formularios seguimiento. El embudo mensual `ingresos` sigue siendo Pagó + seguimiento. */
+  /** Cash por bucket: suma en vivo de `Lead.pago`. El embudo mensual `ingresos` sigue siendo Pagó + seguimiento. */
   ingresos: number[]
   /** Facturación en euros (mismo criterio que `funnel.facturacion` / `leadFacturacionUsd`) por bucket semanal. */
   facturacion: number[]
@@ -87,7 +88,13 @@ export type MemberMetrics = LeadsFunnel & {
 // CORE CALCULATIONS
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+export function leadIsCuotaPlazo(l: LeadRow): boolean {
+  const v = l.es_cuota_plazo
+  return v === true || v === 1 || v === 'true' || v === '1'
+}
+
 export function leadHasAgenda(l: LeadRow): boolean {
+  if (leadIsCuotaPlazo(l)) return false
   const ag = l.agendo
   const hasAgendo = ag != null && String(ag).trim() !== ''
   return !!(l.scheduled_at || l.call_at || l.call || hasAgendo)
@@ -99,6 +106,7 @@ export function leadHasShow(l: LeadRow): boolean {
 }
 
 export function leadIsCierre(l: LeadRow): boolean {
+  if (leadIsCuotaPlazo(l)) return false
   return resolveLeadStatusFlags(String(l.status ?? ''), _statusCatalog).counts_as_cierre
 }
 
@@ -238,7 +246,8 @@ function resolveProgramPrice(programPrices: Record<string, number>, progRaw: unk
 
 /** ISO `YYYY-MM-DD` para bucket semanal/diario de facturación en leads. */
 function leadMetricDateIso(l: LeadRow): string | null {
-  const candidates = [l.date, l.scheduled_at, l.call_at, l.agendo]
+  // Mismo orden que GET /leads ?month= (call > agendo > fecha_bot > created_at/`date`).
+  const candidates = [l.call, l.scheduled_at, l.call_at, l.agendo, l.fecha_bot, l.date]
   for (const c of candidates) {
     const s = String(c ?? '').trim()
     if (!s) continue
@@ -277,7 +286,6 @@ export async function getLeadsAnalytics(month: string): Promise<{ leads: LeadRow
   let programPrices: Record<string, number> = {}
 
   const range = monthRangeIso(month)
-  let seguimientoEntries: { fecha: string; monto: number }[] = []
   let seguimientoTotal = 0
   let chatsReels = 0
   let chatsStories = 0
@@ -323,18 +331,8 @@ export async function getLeadsAnalytics(month: string): Promise<{ leads: LeadRow
     if (segRes.ok) {
       const sj = (await segRes.json().catch(() => ({}))) as {
         total?: unknown
-        entries?: unknown
       }
       seguimientoTotal = Number(sj.total) || 0
-      if (Array.isArray(sj.entries)) {
-        seguimientoEntries = sj.entries
-          .map((x) => x as Record<string, unknown>)
-          .map((x) => ({
-            fecha: String(x.fecha ?? '').slice(0, 10),
-            monto: Number(x.monto) || 0,
-          }))
-          .filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x.fecha))
-      }
     }
 
     if (repRes.ok && range != null) {
@@ -493,7 +491,7 @@ export async function getLeadsAnalytics(month: string): Promise<{ leads: LeadRow
     .map(([nombre, v]) => ({ nombre, ...v }))
     .sort((a, b) => b.ingresos - a.ingresos)
 
-  // Weekly + daily: conversaciones/agendas desde reportes setter; shows/cierres desde leads en vivo
+  // Weekly + daily: conversaciones/agendas desde reportes setter; shows/cierres/ingresos desde leads en vivo
   const allReports = [...setterReports, ...closerReports]
   const byWeek: WeekMetrics = {
     agendas: [0, 0, 0, 0],
@@ -524,11 +522,9 @@ export async function getLeadsAnalytics(month: string): Promise<{ leads: LeadRow
 
     const conv = Number(r.conversaciones) || 0
     const ag = Number(r.agendas) || 0
-    const ing = Number(r.ingreso) || 0
 
     byWeek.conversaciones[w] += conv; byWeekDay.conversaciones[w][dow] += conv
     byWeek.agendas[w] += ag;         byWeekDay.agendas[w][dow] += ag
-    byWeek.ingresos[w] += ing;       byWeekDay.ingresos[w][dow] += ing
   })
 
   leads.forEach((l) => {
@@ -551,19 +547,11 @@ export async function getLeadsAnalytics(month: string): Promise<{ leads: LeadRow
       byWeek.noShows[w] += 1
       byWeekDay.noShows[w][dow] += 1
     }
-  })
-
-  seguimientoEntries.forEach((e) => {
-    const monto = Number(e.monto) || 0
-    if (monto <= 0) return
-    const iso = e.fecha.slice(0, 10)
-    const date = new Date(`${iso}T12:00:00`)
-    if (Number.isNaN(date.getTime())) return
-    const dayOfMonth = date.getDate()
-    const w = Math.min(3, Math.floor((dayOfMonth - 1) / 7))
-    const dow = (date.getDay() + 6) % 7
-    byWeek.ingresos[w] += monto
-    byWeekDay.ingresos[w][dow] += monto
+    const pago = Number(l.payment) || 0
+    if (pago !== 0) {
+      byWeek.ingresos[w] += pago
+      byWeekDay.ingresos[w][dow] += pago
+    }
   })
 
   // Facturación por día/semana: mismo `leadFacturacionUsd` que el embudo mensual (fecha vía `leadMetricDateIso`)

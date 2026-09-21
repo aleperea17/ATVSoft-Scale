@@ -1,47 +1,50 @@
 import { NextResponse } from 'next/server'
-import {
-  mapCalendlyToLead,
-  getEmailFromPayload,
-  isCreatedEvent,
-  isCanceledEvent,
-} from '@/features/leads/services/calendly-mapper'
-import { enrichLeadFromManychat } from '@/features/leads/services/manychat-enricher'
+import { getBackendInternalUrl } from '@/shared/lib/backend-internal-url'
 
-async function getCalendlyToken() {
-  return process.env.CALENDLY_WEBHOOK_TOKEN || 'cal_wh_8f3a2b9d7e1c4056a9d2e8f7b3c1a5d4'
-}
+/** POST /api/webhooks/calendly — proxy al backend FastAPI (match de cuenta + leads). */
+const FORWARD_HEADERS = [
+  'content-type',
+  'calendly-webhook-signature',
+  'calendly-webhook-timestamp',
+  'user-agent',
+] as const
 
-// POST /api/webhooks/calendly — Recibe eventos de Calendly (persistencia en backend FastAPI)
 export async function POST(request: Request) {
+  const backend = getBackendInternalUrl()
+  const incoming = new URL(request.url)
+  const target = `${backend}/webhooks/calendly${incoming.search}`
+
+  const headers = new Headers()
+  for (const name of FORWARD_HEADERS) {
+    const value = request.headers.get(name)
+    if (value) headers.set(name, value)
+  }
+
+  let body: string
   try {
-    const body = await request.json()
-
-    if (!body.event || !body.payload) {
-      return NextResponse.json({ error: 'Invalid Calendly payload' }, { status: 400 })
-    }
-
-    const webhookToken = await getCalendlyToken()
-
-    if (isCreatedEvent(body)) {
-      const params = mapCalendlyToLead(body, webhookToken)
-      try {
-        await enrichLeadFromManychat(params.p_client_name, params.p_ig_handle, params.p_email)
-      } catch {
-        /* ManyChat opcional */
-      }
-      return NextResponse.json({ success: true, lead_id: null })
-    }
-
-    if (isCanceledEvent(body)) {
-      return NextResponse.json({ success: true, action: 'canceled' })
-    }
-
-    return NextResponse.json({ success: true, action: 'ignored' })
+    body = await request.text()
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
+
+  try {
+    const res = await fetch(target, { method: 'POST', headers, body })
+    const text = await res.text()
+    const outType = res.headers.get('content-type') || 'application/json'
+    return new NextResponse(text, { status: res.status, headers: { 'content-type': outType } })
+  } catch {
+    return NextResponse.json({ error: 'Backend unavailable' }, { status: 502 })
   }
 }
 
 export async function GET() {
-  return NextResponse.json({ status: 'ok', service: 'calendly-webhook' })
+  const backend = getBackendInternalUrl()
+  try {
+    const res = await fetch(`${backend}/webhooks/calendly`, { method: 'GET' })
+    const text = await res.text()
+    const outType = res.headers.get('content-type') || 'application/json'
+    return new NextResponse(text, { status: res.status, headers: { 'content-type': outType } })
+  } catch {
+    return NextResponse.json({ status: 'ok', service: 'calendly-webhook' })
+  }
 }

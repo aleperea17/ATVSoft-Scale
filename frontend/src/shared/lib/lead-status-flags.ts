@@ -28,6 +28,7 @@ const LEGACY_ROLES: Record<string, LeadStatusFlags> = {
   won: { counts_as_cierre: true, counts_as_no_show: false, requires_followup_date: false },
   'cerrado pif': { counts_as_cierre: true, counts_as_no_show: false, requires_followup_date: false },
   'cerrado plazos': { counts_as_cierre: true, counts_as_no_show: false, requires_followup_date: true },
+  'plazo pagado': { counts_as_cierre: false, counts_as_no_show: false, requires_followup_date: true },
   'no show': { counts_as_cierre: false, counts_as_no_show: true, requires_followup_date: false },
   noshow: { counts_as_cierre: false, counts_as_no_show: true, requires_followup_date: false },
 }

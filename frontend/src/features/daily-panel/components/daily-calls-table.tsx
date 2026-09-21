@@ -23,6 +23,7 @@ type Props = {
   onFathomLinkChange: (leadId: number, callLink: string | null) => Promise<void>
   onPaymentChange: (leadId: number, payment: number) => Promise<void>
   onOwedChange: (leadId: number, owed: number) => Promise<void>
+  onNextPaymentChange: (leadId: number, fecha: string | null) => Promise<void>
   onNotesChange: (leadId: number, notes: string) => Promise<void>
   onProgramOfferedChange: (leadId: number, program: string) => Promise<void>
   onProgramadaOfrecidoChange: (leadId: number, program: string) => Promise<void>
@@ -315,6 +316,48 @@ function CurrencyCell({
   )
 }
 
+function NextPaymentCell({
+  leadId,
+  value,
+  enabled,
+  onSave,
+}: {
+  leadId: number
+  value: string | null
+  enabled: boolean
+  onSave: (leadId: number, fecha: string | null) => Promise<void>
+}) {
+  const [saving, setSaving] = useState(false)
+  const current = (value || '').slice(0, 10)
+
+  if (!enabled) {
+    return <span className="neo-calls__next-pay neo-calls__next-pay--off">—</span>
+  }
+
+  const commit = async (raw: string) => {
+    const next = raw.trim() ? raw.trim().slice(0, 10) : null
+    if (next === (current || null)) return
+    setSaving(true)
+    try {
+      await onSave(leadId, next)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <input
+      type="date"
+      value={current}
+      disabled={saving}
+      onChange={(e) => void commit(e.target.value)}
+      className="neo-calls__date-input"
+      title="Próximo pago"
+      aria-label={`Próximo pago de lead ${leadId}`}
+    />
+  )
+}
+
 function PaymentCell({
   leadId,
   value,
@@ -519,6 +562,7 @@ export function DailyCallsTable({
   onFathomLinkChange,
   onPaymentChange,
   onOwedChange,
+  onNextPaymentChange,
   onNotesChange,
   onProgramOfferedChange,
   onProgramadaOfrecidoChange,
@@ -562,6 +606,7 @@ export function DailyCallsTable({
         <div>Prog. ofrecido</div>
         <div>Pago</div>
         <div>Debe</div>
+        <div>Próximo pago</div>
         <div>Notas</div>
       </div>
       {items.map((row) => (
@@ -569,6 +614,9 @@ export function DailyCallsTable({
           <div className="neo-calls__hora">{row.hora || '—'}</div>
           <div className="neo-calls__lead" title={row.lead || 'Sin nombre'}>
             {row.lead || 'Sin nombre'}
+            {row.es_cuota_plazo && row.nro_plazo ? (
+              <span className="neo-calls__plazo-badge">Plazo {row.nro_plazo}</span>
+            ) : null}
           </div>
           <CloserSelect
             leadId={row.id}
@@ -600,6 +648,12 @@ export function DailyCallsTable({
           />
           <PaymentCell leadId={row.id} value={row.payment} onSave={onPaymentChange} />
           <CurrencyCell leadId={row.id} value={row.owed} variant="owed" onSave={onOwedChange} />
+          <NextPaymentCell
+            leadId={row.id}
+            value={row.fecha_seguimiento_pago}
+            enabled={row.requires_followup_date}
+            onSave={onNextPaymentChange}
+          />
           <NotesCell leadId={row.id} value={row.notes} onSave={onNotesChange} />
         </div>
       ))}

@@ -15,11 +15,14 @@ class ApiConnection(db.Entity):
     id = PrimaryKey(int, auto=True)
     user_id = Required(int, index=True)
     platform = Required(str)
+    # Distingue múltiples cuentas de la misma plataforma (ej. calendly clienta/closer).
+    # Otras plataformas usan "" (una sola fila).
+    account_key = Required(str, default="")
     credentials = Required(Json, default=lambda: {})
     last_sync_at = Optional(datetime)
     updated_at = Optional(datetime)
 
-    composite_key(user_id, platform)
+    composite_key(user_id, platform, account_key)
 
 
 class StorySequence(db.Entity):
@@ -249,6 +252,12 @@ class Lead(db.Entity):
     formulario = Optional(str, default="")
     # Fecha de seguimiento de pago (UI resalta si el status tiene requires_followup_date)
     fecha_seguimiento_pago = Optional(date)
+    # Cuota automática (plazo): no cuenta como agenda; sí puede tener pago.
+    es_cuota_plazo = Required(bool, default=False)
+    lead_origen_id = Optional(int)
+    nro_plazo = Optional(int)
+    # Cuenta Calendly que originó el booking (ApiConnection.account_key: clienta / closer).
+    calendly_account_key = Optional(str, default="")
     recordatorio_enviado = Optional(bool, default=False)
     created_at = Required(datetime, default=lambda: datetime.utcnow())
 

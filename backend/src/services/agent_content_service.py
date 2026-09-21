@@ -16,6 +16,7 @@ from src.controllers.keywords_controller import (
 from src.controllers.youtube_controller import _aggregate_from_rows, _parse_month_query, _video_month_ar
 from src.models import Lead, ReelContent, YoutubeContent
 from src.services.agent_analytics_service import _lead_month_ar, _parse_month
+from src.services.lead_agenda_utils import lead_counts_as_agenda
 from src.services.reels_services import ReelsServices
 from src.services.stories_service import StoriesService
 
@@ -127,7 +128,7 @@ def _bio_block(user_id: int, month: str) -> dict[str, Any]:
     rows = _rows_for_user_month(user_id, month_key)
 
     total = len(rows)
-    agendaron = sum(1 for r in rows if r.agendo is not None)
+    agendaron = sum(1 for r in rows if lead_counts_as_agenda(r))
     cerrados = sum(1 for r in rows if _is_cerrado(r))
     cash = sum(float(r.pago or 0) for r in rows)
 

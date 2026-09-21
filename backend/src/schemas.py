@@ -139,6 +139,7 @@ class ApiConnectionResponse(BaseModel):
     id: str
     user_id: str
     platform: str
+    account_key: str = ""
     credentials: dict[str, Any] = Field(default_factory=dict)
     last_sync_at: datetime | None = None
     updated_at: datetime | None = None
@@ -146,6 +147,10 @@ class ApiConnectionResponse(BaseModel):
 
 class ApiConnectionUpsertRequest(BaseModel):
     credentials: dict[str, Any] = Field(default_factory=dict)
+    account_key: str | None = Field(
+        default=None,
+        description='Para calendly multi-cuenta: "clienta", "closer", etc. Otras plataformas ignoran / usan "".',
+    )
 
 
 class ReelResponse(BaseModel):
@@ -603,6 +608,13 @@ class LeadOut(BaseModel):
         default=None,
         description="YYYY-MM-DD seguimiento de pago (columna fecha_seguimiento_pago).",
     )
+    es_cuota_plazo: bool = False
+    lead_origen_id: int | None = None
+    nro_plazo: int | None = None
+    calendly_account_key: str | None = Field(
+        default=None,
+        description='Cuenta Calendly del booking: "clienta" | "closer" (columna calendly_account_key).',
+    )
     compromiso: str | None = None
     urgencia: str | None = None
     disposicion_invertir: str | None = None
@@ -680,6 +692,10 @@ class LeadPatchRequest(BaseModel):
     fecha_seguimiento_pago: str | None = Field(
         default=None,
         description="YYYY-MM-DD o vacío para limpiar.",
+    )
+    calendly_account_key: str | None = Field(
+        default=None,
+        description='Cuenta Calendly: "clienta" | "closer" (vacío para limpiar).',
     )
 
 
@@ -1031,6 +1047,10 @@ class AgentLlamadaHoyItemOut(BaseModel):
     programada_ofrecido_llamada: str = ""
     calificacion_llamada: str = ""
     notes: str = ""
+    fecha_seguimiento_pago: str | None = None
+    requires_followup_date: bool = False
+    es_cuota_plazo: bool = False
+    nro_plazo: int | None = None
 
 
 class AgentLlamadasHoyOut(BaseModel):

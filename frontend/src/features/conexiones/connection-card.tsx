@@ -11,6 +11,7 @@ import { ClaudeSaldoHint } from './claude-saldo-hint'
 
 export type ConnectionRow = {
   platform: string
+  account_key?: string
   credentials: Record<string, string>
   last_sync_at: string | null
 }
@@ -52,21 +53,27 @@ function resolveBackendBase(apiBase: string): string {
 type Props = {
   platform: ConnectionPlatform
   connection?: ConnectionRow
+  accountKey?: string
   cardLayout?: 'default' | 'setup'
   apiBase: string
   onSave: (credentials: Record<string, string>) => void | Promise<void>
+  onDisconnect?: () => void | Promise<void>
   onSyncComplete?: () => void | Promise<void>
 }
 
 function ConnectionCardInner({
   platform,
   connection,
+  accountKey,
   cardLayout = 'default',
   apiBase,
   onSave,
+  onDisconnect,
   onSyncComplete,
 }: Props) {
   const isSetup = cardLayout === 'setup'
+  const calendlyAccountKey =
+    accountKey || connection?.account_key || (platform.key === 'calendly' ? 'clienta' : undefined)
   const [form, setForm] = useState<Record<string, string>>({})
   const [expanded, setExpanded] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
@@ -183,7 +190,10 @@ function ConnectionCardInner({
   const refreshCalendlyAutoStatus = useCallback(async () => {
     if (platform.key !== 'calendly') return
     try {
-      const res = await fetch(`${resolveBackendBase(apiBase)}/calendly/auto-sync-status`, {
+      const qs = calendlyAccountKey
+        ? `?account_key=${encodeURIComponent(calendlyAccountKey)}`
+        : ''
+      const res = await fetch(`${resolveBackendBase(apiBase)}/calendly/auto-sync-status${qs}`, {
         headers: backendAuthHeaders(),
       })
       if (!res.ok) return
@@ -208,7 +218,7 @@ function ConnectionCardInner({
     } catch {
       /* sin sesión o backend caído */
     }
-  }, [apiBase, platform.key])
+  }, [apiBase, platform.key, calendlyAccountKey])
 
   useEffect(() => {
     if (platform.key !== 'calendly' || !isConnected) return
@@ -228,7 +238,10 @@ function ConnectionCardInner({
       const res = await fetch(`${resolveBackendBase(apiBase)}/calendly/sync`, {
         method: 'POST',
         headers: backendAuthHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ month: calendlySyncMonth }),
+        body: JSON.stringify({
+          month: calendlySyncMonth,
+          ...(calendlyAccountKey ? { account_key: calendlyAccountKey } : {}),
+        }),
       })
       const data = (await res.json().catch(() => ({}))) as {
         detail?: string | { msg?: string }[]
@@ -264,6 +277,7 @@ function ConnectionCardInner({
     calendlySyncMonth,
     calendlySyncMonthLabel,
     calendlySyncMonthOptions,
+    calendlyAccountKey,
     connection?.credentials?.api_key,
     form.api_key,
     onSyncComplete,
@@ -675,11 +689,35 @@ function ConnectionCardInner({
                   ? `Conectar ${platform.label}`
                   : 'Guardar'}
               </button>
+              {onDisconnect && (isConnected || platform.key === 'calendly') ? (
+                <button
+                  type="button"
+                  disabled={status === 'loading'}
+                  onClick={() => {
+                    void (async () => {
+                      try {
+                        setStatus('loading')
+                        await onDisconnect()
+                        setStatus('idle')
+                      } catch (e) {
+                        setStatus('error')
+                        setErrorMsg(e instanceof Error ? e.message : 'Error al desconectar')
+                      }
+                    })()
+                  }}
+                  className={BTN_SECONDARY}
+                >
+                  Desconectar
+                </button>
+              ) : null}
               {connection?.last_sync_at && (
                 <span className="text-[11px] text-[var(--text3)]">
                   Última sync: {new Date(connection.last_sync_at).toLocaleString('es-AR')}
                 </span>
               )}
+              {status === 'error' && errorMsg ? (
+                <span className="text-[12px] text-[var(--text2)]">{errorMsg}</span>
+              ) : null}
             </div>
           )}
           {calendlySyncBlock}

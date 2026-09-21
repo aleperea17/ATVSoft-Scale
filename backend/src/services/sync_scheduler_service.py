@@ -20,6 +20,7 @@ REELS_JOB_ID = "auto_refresh_reels_metrics"
 REELS_NEW_SYNC_JOB_ID = "auto_sync_new_reels"
 CALENDLY_JOB_ID = "auto_sync_calendly"
 CLOSER_DAILY_REPORT_JOB_ID = "auto_closer_daily_reports"
+PLAZOS_PAGO_JOB_ID = "auto_generate_plazos_pago"
 
 _scheduler: Any | None = None
 

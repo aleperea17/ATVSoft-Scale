@@ -18,6 +18,7 @@ import {
   patchLeadCallLink,
   patchLeadCloser,
   patchLeadOwed,
+  patchLeadFechaSeguimientoPago,
   patchLeadPayment,
   patchLeadNotes,
   patchLeadProgramOffered,
@@ -36,6 +37,7 @@ import type { DailyCall, PendingAgendaLead } from '../types'
 import { DailyCallsTable } from './daily-calls-table'
 import { PendingAgendaTable } from './pending-agenda-table'
 import { AgendaPointPickerModal } from '@/features/leads/components/agenda-point-picker-modal'
+import { resolveLeadStatusFlags } from '@/shared/lib/lead-status-flags'
 import '../daily-panel.css'
 import '../daily-panel-manual-call.css'
 
@@ -197,7 +199,15 @@ export function DailyPanelPage({
       try {
         await patchLeadStatus(leadId, status)
         setCalls((prev) =>
-          prev.map((c) => (c.id === leadId ? { ...c, status } : c)),
+          prev.map((c) =>
+            c.id === leadId
+              ? {
+                  ...c,
+                  status,
+                  requires_followup_date: resolveLeadStatusFlags(status).requires_followup_date,
+                }
+              : c,
+          ),
         )
       } catch (e) {
         toast(e instanceof Error ? e.message : 'No se pudo guardar el status.')
@@ -264,6 +274,21 @@ export function DailyPanelPage({
         )
       } catch (e) {
         toast(e instanceof Error ? e.message : 'No se pudo guardar el debe.')
+        throw e
+      }
+    },
+    [toast],
+  )
+
+  const handleNextPaymentChange = useCallback(
+    async (leadId: number, fecha: string | null) => {
+      try {
+        await patchLeadFechaSeguimientoPago(leadId, fecha)
+        setCalls((prev) =>
+          prev.map((c) => (c.id === leadId ? { ...c, fecha_seguimiento_pago: fecha } : c)),
+        )
+      } catch (e) {
+        toast(e instanceof Error ? e.message : 'No se pudo guardar el próximo pago.')
         throw e
       }
     },
@@ -548,6 +573,7 @@ export function DailyPanelPage({
           onFathomLinkChange={handleFathomLinkChange}
           onPaymentChange={handlePaymentChange}
           onOwedChange={handleOwedChange}
+          onNextPaymentChange={handleNextPaymentChange}
           onNotesChange={handleNotesChange}
           onProgramOfferedChange={handleProgramOfferedChange}
           onProgramadaOfrecidoChange={handleProgramadaOfrecidoChange}

@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from src.controllers.auth_controller import get_current_user_id
@@ -75,4 +75,21 @@ def upsert_conexion(
         raise HTTPException(
             status_code=500,
             detail="Error inesperado al guardar la conexión.",
+        )
+
+
+@router.delete("/{platform}", status_code=204)
+def delete_conexion(
+    platform: str,
+    user_id: Annotated[int, Depends(get_current_user_id)],
+    account_key: Annotated[str | None, Query()] = None,
+) -> None:
+    try:
+        service.delete(user_id, platform, account_key=account_key)
+    except HTTPException as e:
+        raise e
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Error inesperado al eliminar la conexión.",
         )
