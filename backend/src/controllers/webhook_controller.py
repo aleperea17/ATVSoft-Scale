@@ -1,6 +1,6 @@
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Request
 from pony.orm import db_session
 
@@ -19,6 +19,7 @@ from src.services.calendly_webhook_service import (
     backfill_calendly_user_uris,
     connections_missing_calendly_user_uri,
 )
+from src.services.company_config_service import to_company_naive
 from src.services.lead_agenda_utils import lead_is_cuota_plazo
 from src.services.lead_statuses_services import booking_lead_status_name
 
@@ -270,10 +271,10 @@ def _calendly_webhook_received_at(flat: dict, inner: dict) -> datetime:
     if raw:
         dt = _parse_calendly_start_time(str(raw))
         if dt is not None:
-            if dt.tzinfo is not None:
-                dt = dt.replace(tzinfo=None)
-            return dt
-    return datetime.utcnow()
+            converted = to_company_naive(dt)
+            if converted is not None:
+                return converted
+    return to_company_naive(datetime.now(timezone.utc)) or datetime.utcnow()
 
 
 def _parse_calendly_start_time(raw: str | None) -> datetime | None:
@@ -542,7 +543,7 @@ async def calendly_webhook(request: Request) -> dict[str, str]:
         start_raw = flat["scheduled_event"].get("start_time")
     if isinstance(start_raw, dict):
         start_raw = start_raw.get("start_time")
-    start_dt = _parse_calendly_start_time(str(start_raw) if start_raw else None)
+    start_dt = to_company_naive(_parse_calendly_start_time(str(start_raw) if start_raw else None))
 
     telefono = (telefono_q or "") or _phone_from_calendly_payload(flat)
     ig_hint = (ig_q or "").lstrip("@") or _ig_from_calendly_qa(flat)

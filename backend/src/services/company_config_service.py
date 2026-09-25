@@ -37,6 +37,15 @@ def naive_utc_to_company(dt: datetime, tz: ZoneInfo | None = None) -> datetime:
     return dt.replace(tzinfo=timezone.utc).astimezone(zone)
 
 
+def to_company_naive(dt: datetime | None) -> datetime | None:
+    """Datetime aware (o naive=UTC) → hora de pared Europe/Madrid, sin tzinfo, para columnas naive."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(get_company_tz()).replace(tzinfo=None)
+
+
 def datetime_month_tuple(dt: datetime | None, tz: ZoneInfo | None = None) -> tuple[int, int] | None:
     if dt is None:
         return None

@@ -27,6 +27,7 @@ from src.services.calendly_event_type_filter import (
     is_event_type_allowed,
 )
 from src.services.calendly_webhook_service import persist_calendly_user_uri_if_missing
+from src.services.company_config_service import to_company_naive
 from src.services.lead_agenda_utils import lead_is_cuota_plazo
 from src.services.lead_statuses_services import booking_lead_status_name
 
@@ -628,7 +629,7 @@ def _run_calendly_sync_one(
             event_uuid = _uri_uuid(str(event.get("uri") or ""))
             if not event_uuid:
                 continue
-            start_dt = _parse_calendly_start_time(str(event.get("start_time") or ""))
+            start_dt = to_company_naive(_parse_calendly_start_time(str(event.get("start_time") or "")))
             if invitee_request_count > 0:
                 time.sleep(_INVITEE_REQUEST_DELAY_S)
             invitee_request_count += 1
@@ -648,7 +649,9 @@ def _run_calendly_sync_one(
                         "name": str(invitee.get("name") or "").strip(),
                         "email": email,
                         "call_at": start_dt,
-                        "agendo_at": _parse_calendly_start_time(str(invitee.get("created_at") or "")),
+                        "agendo_at": to_company_naive(
+                            _parse_calendly_start_time(str(invitee.get("created_at") or ""))
+                        ),
                         "form_fields": _extract_calendly_form_fields(invitee, invitee),
                     }
                 )
