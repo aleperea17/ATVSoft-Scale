@@ -149,3 +149,35 @@ class DiscordServices:
             return False, detail or f"Discord respondió {resp.status_code}."
         except Exception as exc:
             return False, str(exc)
+
+    def is_weekly_webhook_configured(self) -> bool:
+        return bool((config("DISCORD_WEEKLY_WEBHOOK_URL", default="") or "").strip())
+
+    def send_weekly_team_report_to_discord(self, body: dict[str, Any]) -> bool:
+        webhook_url = (config("DISCORD_WEEKLY_WEBHOOK_URL", default="") or "").strip()
+        if not webhook_url:
+            return False
+
+        desde = str(body.get("desde") or "")
+        hasta = str(body.get("hasta") or "")
+        embed = {
+            "title": f"REPORTE SEMANAL · EQUIPO COMERCIAL · {desde} → {hasta}",
+            "color": 0x2B2D31,
+            "fields": [
+                {
+                    "name": "MÉTRICAS",
+                    "value": (
+                        f"Calls: **{body.get('calls', 0)}**\n"
+                        f"Calls cerradas: **{body.get('calls_cerradas', 0)}**\n"
+                        f"Conversaciones: **{body.get('conversaciones', 0)}**"
+                    ),
+                    "inline": False,
+                },
+            ],
+        }
+
+        try:
+            resp = httpx.post(webhook_url, json={"embeds": [embed]}, timeout=5.0)
+            return resp.is_success
+        except Exception:
+            return False

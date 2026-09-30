@@ -44,6 +44,7 @@ from src.services.company_config_service import get_company_timezone_name, get_c
 from src.services.sync_scheduler_service import (
     CALENDLY_JOB_ID,
     CLOSER_DAILY_REPORT_JOB_ID,
+    WEEKLY_TEAM_DISCORD_JOB_ID,
     PLAZOS_PAGO_JOB_ID,
     REELS_JOB_ID,
     REELS_NEW_SYNC_JOB_ID,
@@ -63,6 +64,7 @@ from src.services.sync_settings_service import (
 from src.services.stories_service import StoriesService
 from src.services.closer_report_auto_service import generate_daily_reports_all_users
 from src.services.plazos_pago_service import generate_plazos_pago
+from src.services.weekly_team_discord_service import generate_weekly_team_reports
 
 scheduler = AsyncIOScheduler()
 
@@ -177,6 +179,15 @@ async def auto_generate_closer_daily_reports() -> None:
         print(f"[scheduler] Error en auto_generate_closer_daily_reports: {e}")
 
 
+async def auto_weekly_team_discord_report() -> None:
+    """Resumen lun–dom del equipo comercial a Discord (domingo 23:30 TZ empresa)."""
+    try:
+        rows = generate_weekly_team_reports(send_discord=True)
+        print(f"[scheduler] Reporte semanal equipo Discord OK tenants={len(rows)}")
+    except Exception as e:
+        print(f"[scheduler] Error en auto_weekly_team_discord_report: {e}")
+
+
 async def auto_generate_plazos_pago() -> None:
     """Cuotas PLAZO PAGADO a las 00:15 (TZ empresa). Independiente de DISABLE_AUTO_SYNC."""
     try:
@@ -243,6 +254,13 @@ async def lifespan(_: FastAPI):
             f"(check liviano -> sync solo si hay novedades)"
         )
         print(f"[scheduler] Reporte closer ventas automático diario a las 23:00 ({tz_name})")
+        scheduler.add_job(
+            auto_weekly_team_discord_report,
+            trigger=CronTrigger(day_of_week="sun", hour=23, minute=30, timezone=company_tz),
+            id=WEEKLY_TEAM_DISCORD_JOB_ID,
+            replace_existing=True,
+        )
+        print(f"[scheduler] Reporte semanal equipo Discord domingo 23:30 ({tz_name})")
         print(
             f"[scheduler] Reels automático diario a las 23:59 ({tz_name}): "
             "buscar nuevos + actualizar métricas"
