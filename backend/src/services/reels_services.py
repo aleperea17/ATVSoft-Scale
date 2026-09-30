@@ -88,6 +88,11 @@ class ReelsServices:
             return None
         return self._as_utc(dt).astimezone(get_company_tz()).date()
 
+    def _month_key_ar(self, dt: datetime | None) -> str | None:
+        """YYYY-MM en zona empresa. Lo usa el listado (available_months) y el filtro ?month=."""
+        d = self._pub_date_ar(dt)
+        return d.strftime("%Y-%m") if d else None
+
     def _filter_reels_by_period(
         self,
         rows: list,
