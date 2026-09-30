@@ -3,6 +3,18 @@ import {
   resolveLeadStatusFlags,
   type LeadStatusCatalogItem,
 } from '@/shared/lib/lead-status-flags'
+import {
+  type AnalyticsPeriod,
+  daysInInclusiveRange,
+  displayRangeForPeriod,
+  formatDayAxisLabel,
+  isoWeekBucketsInRange,
+  monthRangeIso,
+  periodQueryString,
+} from '@/shared/lib/date-range'
+
+export { monthRangeIso }
+export type { AnalyticsPeriod }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // TYPES
@@ -74,8 +86,10 @@ export type LeadsAnalytics = LeadsFunnel & {
   cierresOrganico: number
   cierresAds: number
   programas: { nombre: string; ventas: number; ingresos: number }[]
+  weekLabels: string[]
+  dayLabels: string[]
   byWeek: WeekMetrics
-  byWeekDay: { [K in keyof WeekMetrics]: number[][] } // [4 weeks][7 days]
+  byDay: WeekMetrics
   cashCollectedComposition: CashCollectedComposition
 }
 
@@ -257,19 +271,27 @@ function leadMetricDateIso(l: LeadRow): string | null {
   return null
 }
 
-export function monthRangeIso(month: string): { desde: string; hasta: string } | null {
-  const m = /^(\d{4})-(\d{2})$/.exec(month.trim())
-  if (!m) return null
-  const y = Number(m[1])
-  const mo = Number(m[2])
-  if (!Number.isFinite(y) || mo < 1 || mo > 12) return null
-  const desde = `${y}-${String(mo).padStart(2, '0')}-01`
-  const last = new Date(y, mo, 0).getDate()
-  const hasta = `${y}-${String(mo).padStart(2, '0')}-${String(last).padStart(2, '0')}`
-  return { desde, hasta }
+function emptyMetrics(n: number): WeekMetrics {
+  const z = () => Array.from({ length: n }, () => 0)
+  return {
+    agendas: z(),
+    conversaciones: z(),
+    shows: z(),
+    cierres: z(),
+    ingresos: z(),
+    facturacion: z(),
+    noShows: z(),
+  }
 }
 
-export async function getLeadsAnalytics(month: string): Promise<{ leads: LeadRow[]; analytics: LeadsAnalytics; conversaciones: number }> {
+function resolveAnalyticsPeriod(input: string | AnalyticsPeriod): AnalyticsPeriod {
+  if (typeof input === 'string') return { kind: 'month', month: input }
+  return input
+}
+
+export async function getLeadsAnalytics(
+  monthOrPeriod: string | AnalyticsPeriod,
+): Promise<{ leads: LeadRow[]; analytics: LeadsAnalytics; conversaciones: number }> {
   try {
     const stRes = await apiFetch('/lead-statuses')
     if (stRes.ok) {
@@ -285,25 +307,21 @@ export async function getLeadsAnalytics(month: string): Promise<{ leads: LeadRow
   const closerReports: Record<string, unknown>[] = []
   let programPrices: Record<string, number> = {}
 
-  const range = monthRangeIso(month)
+  const period = resolveAnalyticsPeriod(monthOrPeriod)
+  const bucketRange = displayRangeForPeriod(period)
+  const q = periodQueryString(period)
   let seguimientoTotal = 0
   let chatsReels = 0
   let chatsStories = 0
   try {
-    const leadsReq = apiFetch(`/leads?month=${encodeURIComponent(month)}`)
+    const leadsReq = apiFetch(`/leads?${q}`)
     const programsReq = apiFetch('/programs')
-    const reelsMetricsReq = apiFetch(`/reels/metrics?month=${encodeURIComponent(month)}`)
-    const storiesMetricsReq = apiFetch(`/stories/metrics?month=${encodeURIComponent(month)}`)
-    const segReq =
-      range != null
-        ? apiFetch(`/team/seguimiento-reports/month?month=${encodeURIComponent(month)}`)
-        : Promise.resolve(new Response('', { status: 400 }))
-    const reportsReq =
-      range != null
-        ? apiFetch(
-            `/team/reports?desde=${encodeURIComponent(range.desde)}&hasta=${encodeURIComponent(range.hasta)}`,
-          )
-        : Promise.resolve(new Response('', { status: 400 }))
+    const reelsMetricsReq = apiFetch(`/reels/metrics?${q}`)
+    const storiesMetricsReq = apiFetch(`/stories/metrics?${q}`)
+    const segReq = apiFetch(`/team/seguimiento-reports/month?${q}`)
+    const reportsReq = apiFetch(
+      `/team/reports?desde=${encodeURIComponent(bucketRange.desde)}&hasta=${encodeURIComponent(bucketRange.hasta)}`,
+    )
     const [leadsRes, repRes, progRes, segRes, reelsMetricsRes, storiesMetricsRes] = await Promise.all([
       leadsReq,
       reportsReq,
@@ -335,7 +353,7 @@ export async function getLeadsAnalytics(month: string): Promise<{ leads: LeadRow
       seguimientoTotal = Number(sj.total) || 0
     }
 
-    if (repRes.ok && range != null) {
+    if (repRes.ok) {
       const j = (await repRes.json().catch(() => ({}))) as { reports?: unknown[] }
       if (Array.isArray(j.reports)) {
         for (const raw of j.reports) {
@@ -491,82 +509,62 @@ export async function getLeadsAnalytics(month: string): Promise<{ leads: LeadRow
     .map(([nombre, v]) => ({ nombre, ...v }))
     .sort((a, b) => b.ingresos - a.ingresos)
 
-  // Weekly + daily: conversaciones/agendas desde reportes setter; shows/cierres/ingresos desde leads en vivo
   const allReports = [...setterReports, ...closerReports]
-  const byWeek: WeekMetrics = {
-    agendas: [0, 0, 0, 0],
-    conversaciones: [0, 0, 0, 0],
-    shows: [0, 0, 0, 0],
-    cierres: [0, 0, 0, 0],
-    ingresos: [0, 0, 0, 0],
-    facturacion: [0, 0, 0, 0],
-    noShows: [0, 0, 0, 0],
-  }
-  const z7 = () => [0, 0, 0, 0, 0, 0, 0]
-  const byWeekDay: LeadsAnalytics['byWeekDay'] = {
-    conversaciones: [z7(), z7(), z7(), z7()],
-    agendas: [z7(), z7(), z7(), z7()],
-    shows: [z7(), z7(), z7(), z7()],
-    cierres: [z7(), z7(), z7(), z7()],
-    ingresos: [z7(), z7(), z7(), z7()],
-    facturacion: [z7(), z7(), z7(), z7()],
-    noShows: [z7(), z7(), z7(), z7()],
-  }
+  const weekBuckets = isoWeekBucketsInRange(bucketRange.desde, bucketRange.hasta)
+  const dayList = daysInInclusiveRange(bucketRange.desde, bucketRange.hasta)
+  const byWeek = emptyMetrics(weekBuckets.length)
+  const byDay = emptyMetrics(dayList.length)
+  const weekLabels = weekBuckets.map((b) => b.label)
+  const dayLabels = dayList.map((d) => formatDayAxisLabel(d))
+
+  const weekIndexFor = (iso: string) => weekBuckets.findIndex((b) => iso >= b.desde && iso <= b.hasta)
+  const dayIndexFor = (iso: string) => dayList.indexOf(iso)
 
   allReports.forEach((r: Record<string, unknown>) => {
-    const date = new Date((r.date as string) + 'T12:00:00')
-    if (Number.isNaN(date.getTime())) return
-    const dayOfMonth = date.getDate()
-    const w = Math.min(3, Math.floor((dayOfMonth - 1) / 7))
-    const dow = (date.getDay() + 6) % 7 // Mon=0 Sun=6
-
+    const iso = String(r.date ?? '').slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return
+    const w = weekIndexFor(iso)
+    const di = dayIndexFor(iso)
     const conv = Number(r.conversaciones) || 0
     const ag = Number(r.agendas) || 0
-
-    byWeek.conversaciones[w] += conv; byWeekDay.conversaciones[w][dow] += conv
-    byWeek.agendas[w] += ag;         byWeekDay.agendas[w][dow] += ag
+    if (w >= 0) {
+      byWeek.conversaciones[w] += conv
+      byWeek.agendas[w] += ag
+    }
+    if (di >= 0) {
+      byDay.conversaciones[di] += conv
+      byDay.agendas[di] += ag
+    }
   })
 
   leads.forEach((l) => {
     const iso = leadMetricDateIso(l)
     if (!iso) return
-    const date = new Date(`${iso}T12:00:00`)
-    if (Number.isNaN(date.getTime())) return
-    const dayOfMonth = date.getDate()
-    const w = Math.min(3, Math.floor((dayOfMonth - 1) / 7))
-    const dow = (date.getDay() + 6) % 7
-    if (leadHasShow(l)) {
-      byWeek.shows[w] += 1
-      byWeekDay.shows[w][dow] += 1
+    const w = weekIndexFor(iso)
+    const di = dayIndexFor(iso)
+    const bump = (target: WeekMetrics, idx: number) => {
+      if (idx < 0) return
+      if (leadHasShow(l)) target.shows[idx] += 1
+      if (leadIsCierre(l)) target.cierres[idx] += 1
+      if (resolveLeadStatusFlags(String(l.status ?? ''), _statusCatalog).counts_as_no_show) {
+        target.noShows[idx] += 1
+      }
+      const pago = Number(l.payment) || 0
+      if (pago !== 0) target.ingresos[idx] += pago
     }
-    if (leadIsCierre(l)) {
-      byWeek.cierres[w] += 1
-      byWeekDay.cierres[w][dow] += 1
-    }
-    if (resolveLeadStatusFlags(String(l.status ?? ''), _statusCatalog).counts_as_no_show) {
-      byWeek.noShows[w] += 1
-      byWeekDay.noShows[w][dow] += 1
-    }
-    const pago = Number(l.payment) || 0
-    if (pago !== 0) {
-      byWeek.ingresos[w] += pago
-      byWeekDay.ingresos[w][dow] += pago
-    }
+    bump(byWeek, w)
+    bump(byDay, di)
   })
 
-  // Facturación por día/semana: mismo `leadFacturacionUsd` que el embudo mensual (fecha vía `leadMetricDateIso`)
   leads.forEach((l) => {
     const bill = leadFacturacionUsd(l)
     if (bill <= 0) return
     const iso = leadMetricDateIso(l)
     if (!iso) return
-    const date = new Date(`${iso}T12:00:00`)
-    if (Number.isNaN(date.getTime())) return
-    const dayOfMonth = date.getDate()
-    const w = Math.min(3, Math.floor((dayOfMonth - 1) / 7))
-    const dow = (date.getDay() + 6) % 7
-    byWeek.facturacion[w] += bill
-    byWeekDay.facturacion[w][dow] += bill
+    const w = weekIndexFor(iso)
+    const di = dayIndexFor(iso)
+    if (w >= 0) byWeek.facturacion[w] += bill
+    if (di >= 0) byDay.facturacion[di] += bill
   })
 
   return {
@@ -586,8 +584,10 @@ export async function getLeadsAnalytics(month: string): Promise<{ leads: LeadRow
       cierresOrganico,
       cierresAds,
       programas,
+      weekLabels,
+      dayLabels,
       byWeek,
-      byWeekDay,
+      byDay,
       cashCollectedComposition: {
         pago: cashFromLeadsPayments,
         seguimiento: seguimientoTotal,

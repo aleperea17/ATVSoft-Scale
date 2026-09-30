@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useMonthContext } from '@/shared/components/app-providers'
-import { MonthSelector } from '@/shared/components/month-selector'
+import { DateRangeFilter } from '@/shared/components/date-range-filter'
 import { useToast } from '@/shared/components/toast'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
 import { formatCash } from '@/shared/lib/format-utils'
 import { apiFetch } from '@/lib/api'
 import { getLeadsAnalytics } from '@/features/leads/services/leads-analytics'
+import { periodFromUiRange, periodQueryString } from '@/shared/lib/date-range'
 
 type ApiTeamMember = { id: number; nombre: string; rol: string; activo: boolean }
 
@@ -53,7 +54,7 @@ function errMessage(data: unknown): string {
 }
 
 export function TeamPage() {
-  const { month, options, setMonth } = useMonthContext()
+  const { desde, hasta, setDateRange, applyThisMonth } = useMonthContext()
   const { toast } = useToast()
   const { ready, userId } = useAuthUser()
   const [setters, setSetters] = useState<ApiTeamMember[]>([])
@@ -75,10 +76,12 @@ export function TeamPage() {
     }
     setLoading(true)
     try {
+      const period = periodFromUiRange(desde, hasta)
+      const q = periodQueryString(period)
       const [mRes, dRes, analyticsBundle] = await Promise.all([
         apiFetch('/team/members'),
-        apiFetch(`/team/dashboard?month=${encodeURIComponent(month)}`),
-        getLeadsAnalytics(month).catch(() => null),
+        apiFetch(`/team/dashboard?${q}`),
+        getLeadsAnalytics(period).catch(() => null),
       ])
       if (!mRes.ok) {
         toast(errMessage(await mRes.json().catch(() => ({}))))
@@ -112,7 +115,7 @@ export function TeamPage() {
     } finally {
       setLoading(false)
     }
-  }, [month, ready, toast, userId])
+  }, [desde, hasta, ready, toast, userId])
 
   useEffect(() => {
     void fetchData()
@@ -160,9 +163,14 @@ export function TeamPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <h2 className="text-lg font-semibold tracking-tight">Dashboard de Equipo</h2>
-        <MonthSelector month={month} options={options} onChange={setMonth} />
+        <DateRangeFilter
+          desde={desde}
+          hasta={hasta}
+          onChange={setDateRange}
+          onThisMonth={applyThisMonth}
+        />
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">

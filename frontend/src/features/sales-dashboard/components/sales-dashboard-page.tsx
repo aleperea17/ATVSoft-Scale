@@ -1,24 +1,30 @@
 'use client'
 
-import { useState, useEffect, useCallback, Fragment } from 'react'
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { useMonthContext } from '@/shared/components/app-providers'
-import { MonthSelector } from '@/shared/components/month-selector'
+import { DateRangeFilter } from '@/shared/components/date-range-filter'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
 import { formatCash, formatCashAxisShort, formatIsoDateDdMmYyyy } from '@/shared/lib/format-utils'
 import { resolveMediaUrl } from '@/shared/lib/backend-public-url'
 import { Bar, Line } from '@/shared/components/charts'
 import {
   getLeadsAnalytics,
-  monthRangeIso,
   filterLeadsForFunnelStep,
   sortLeadsForFunnelStep,
   setLeadStatusCatalog,
+  type AnalyticsPeriod,
   type FunnelLeadStep,
   type LeadRow,
 } from '@/features/leads/services/leads-analytics'
 import type { VDData } from '@/features/sales-dashboard/sales-dashboard-vd'
 import { Modal } from '@/shared/components/modal'
 import { apiFetch } from '@/lib/api'
+import {
+  displayRangeForPeriod,
+  periodFromUiRange,
+  periodQueryString,
+  previousComparisonPeriod,
+} from '@/shared/lib/date-range'
 
 function fP(v: number) { return v.toFixed(1) + '%' }
 function fPOrDash(v: number) {
@@ -29,16 +35,15 @@ function fN(v: number) { return Math.round(v).toLocaleString('es-AR') }
 function pct(o: number, n: number) { if (o === 0) return n > 0 ? 100 : 0; return ((n - o) / Math.abs(o)) * 100 }
 
 export function SalesDashboardPage() {
-  const { month, options, setMonth } = useMonthContext()
+  const { desde, hasta, setDateRange, applyThisMonth } = useMonthContext()
   const { ready, userId } = useAuthUser()
   const [tab, setTab] = useState<'mensual' | 'semanal' | 'diario'>('mensual')
-  const [semana, setSemana] = useState(0)
   const [curr, setCurr] = useState<VDData | null>(null)
   const [prev, setPrev] = useState<VDData | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const buildVD = useCallback(async (m: string): Promise<VDData> => {
-    const { analytics } = await getLeadsAnalytics(m)
+  const buildVD = useCallback(async (period: AnalyticsPeriod): Promise<VDData> => {
+    const { analytics } = await getLeadsAnalytics(period)
     return {
       ...analytics,
       chats: analytics.chats,
@@ -53,6 +58,9 @@ export function SalesDashboardPage() {
     }
   }, [])
 
+  const period = useMemo(() => periodFromUiRange(desde, hasta), [desde, hasta])
+  const prevPeriod = useMemo(() => previousComparisonPeriod(desde, hasta), [desde, hasta])
+
   const fetchData = useCallback(async () => {
     if (!ready) return
     if (!userId) {
@@ -62,16 +70,14 @@ export function SalesDashboardPage() {
       return
     }
     setLoading(true)
-    const [y, m] = month.split('-').map(Number)
-    const prevMonth = `${new Date(y, m - 2, 1).getFullYear()}-${String(new Date(y, m - 2, 1).getMonth() + 1).padStart(2, '0')}`
     try {
-      const [c, p] = await Promise.all([buildVD(month), buildVD(prevMonth)])
+      const [c, p] = await Promise.all([buildVD(period), buildVD(prevPeriod)])
       setCurr(c)
       setPrev(p)
     } finally {
       setLoading(false)
     }
-  }, [month, ready, userId, buildVD])
+  }, [period, prevPeriod, ready, userId, buildVD])
 
   useEffect(() => {
     void fetchData()
@@ -101,9 +107,14 @@ export function SalesDashboardPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <h2 className="text-lg font-semibold tracking-tight">Dashboard <span className="text-[var(--text2)]">de Ventas</span></h2>
-        <MonthSelector month={month} options={options} onChange={setMonth} />
+        <DateRangeFilter
+          desde={desde}
+          hasta={hasta}
+          onChange={setDateRange}
+          onThisMonth={applyThisMonth}
+        />
       </div>
 
       {/* Tabs */}
@@ -116,9 +127,9 @@ export function SalesDashboardPage() {
         ))}
       </div>
 
-      {tab === 'mensual' && <MensualView curr={curr} prev={prev} delta={delta} month={month} />}
+      {tab === 'mensual' && <MensualView curr={curr} prev={prev} delta={delta} period={period} />}
       {tab === 'semanal' && <SemanalView curr={curr} />}
-      {tab === 'diario' && <DiarioView curr={curr} semana={semana} setSemana={setSemana} />}
+      {tab === 'diario' && <DiarioView curr={curr} />}
     </div>
   )
 }
@@ -355,7 +366,7 @@ function VDKpi({
       <div className="font-mono-num text-[28px] font-bold tracking-tight">{value}</div>
       {change !== undefined && (
         <div className="mt-2 text-[11px] font-semibold inline-flex items-center gap-1" style={{ color: clr }}>
-          {arrow} {Math.abs(change).toFixed(1)}%<span className="text-[var(--text3)] font-normal ml-1">vs mes ant.</span>
+          {arrow} {Math.abs(change).toFixed(1)}%<span className="text-[var(--text3)] font-normal ml-1">vs período ant.</span>
         </div>
       )}
     </button>
@@ -565,12 +576,17 @@ function ContentChatRow({
   )
 }
 
+function periodTitle(period: AnalyticsPeriod): string {
+  if (period.kind === 'month') return period.month
+  return `${period.desde} – ${period.hasta}`
+}
+
 function FunnelChatsBreakdown({
-  month,
+  period,
   chatsStories,
   chatsReels,
 }: {
-  month: string
+  period: AnalyticsPeriod
   chatsStories: number
   chatsReels: number
 }) {
@@ -583,9 +599,10 @@ function FunnelChatsBreakdown({
     setLoading(true)
     void (async () => {
       try {
+        const q = periodQueryString(period)
         const [reelsRes, storiesRes] = await Promise.all([
-          apiFetch(`/reels?page=1&page_size=50&month=${encodeURIComponent(month)}&skip_agg=1`),
-          apiFetch(`/stories/sequences?month=${encodeURIComponent(month)}`),
+          apiFetch(`/reels?page=1&page_size=50&${q}&skip_agg=1`),
+          apiFetch(`/stories/sequences?${q}`),
         ])
         const reelsBody = reelsRes.ok
           ? ((await reelsRes.json().catch(() => ({}))) as { reels?: Record<string, unknown>[] })
@@ -636,7 +653,7 @@ function FunnelChatsBreakdown({
       }
     })()
     return () => { cancelled = true }
-  }, [month])
+  }, [period])
 
   if (loading) {
     return <p className="py-8 text-center text-[13px] text-[var(--text3)]">Cargando historias y reels...</p>
@@ -705,10 +722,10 @@ type FunnelSetterReportRow = {
 }
 
 function FunnelSetterReportsBreakdown({
-  month,
+  period,
   metric,
 }: {
-  month: string
+  period: AnalyticsPeriod
   metric: 'conversaciones' | 'agendas'
 }) {
   const [rows, setRows] = useState<FunnelSetterReportRow[]>([])
@@ -719,11 +736,7 @@ function FunnelSetterReportsBreakdown({
     setLoading(true)
     void (async () => {
       try {
-        const range = monthRangeIso(month)
-        if (!range) {
-          if (!cancelled) setRows([])
-          return
-        }
+        const range = displayRangeForPeriod(period)
         const res = await apiFetch(
           `/team/reports?desde=${encodeURIComponent(range.desde)}&hasta=${encodeURIComponent(range.hasta)}`,
         )
@@ -751,7 +764,7 @@ function FunnelSetterReportsBreakdown({
       }
     })()
     return () => { cancelled = true }
-  }, [month])
+  }, [period])
 
   const total = rows.reduce((sum, r) => sum + r[metric], 0)
   const metricLabel = metric === 'conversaciones' ? 'Conversaciones' : 'Agendas'
@@ -858,10 +871,10 @@ function leadCallDateIso(l: LeadRow): string {
 }
 
 function FunnelLeadsBreakdown({
-  month,
+  period,
   step,
 }: {
-  month: string
+  period: AnalyticsPeriod
   step: 'SHOWS' | 'CIERRES'
 }) {
   const [rows, setRows] = useState<FunnelLeadListRow[]>([])
@@ -883,7 +896,7 @@ function FunnelLeadsBreakdown({
         } catch {
           /* catálogo default */
         }
-        const res = await apiFetch(`/leads?month=${encodeURIComponent(month)}`)
+        const res = await apiFetch(`/leads?${periodQueryString(period)}`)
         if (!res.ok) {
           if (!cancelled) setRows([])
           return
@@ -907,7 +920,7 @@ function FunnelLeadsBreakdown({
     return () => {
       cancelled = true
     }
-  }, [month, step])
+  }, [period, step])
 
   const metricLabel = step === 'SHOWS' ? 'Shows' : 'Cierres'
   const totalPago = rows.reduce((s, r) => s + r.payment, 0)
@@ -975,47 +988,47 @@ function FunnelBreakdownModal({
   step,
   open,
   onClose,
-  month,
+  period,
   chatsStories,
   chatsReels,
 }: {
   step: FunnelLeadStep | null
   open: boolean
   onClose: () => void
-  month: string
+  period: AnalyticsPeriod
   chatsStories: number
   chatsReels: number
 }) {
   if (!step) return null
 
-  const title = `${FUNNEL_STEP_LABELS[step]} — ${month}`
+  const title = `${FUNNEL_STEP_LABELS[step]} — ${periodTitle(period)}`
 
   return (
     <Modal open={open} onClose={onClose} title={title} maxWidth={step === 'CHATS' ? '1040px' : '920px'}>
       {step === 'CHATS' ? (
         <>
-          <FunnelChatsBreakdown month={month} chatsStories={chatsStories} chatsReels={chatsReels} />
+          <FunnelChatsBreakdown period={period} chatsStories={chatsStories} chatsReels={chatsReels} />
           <p className="mt-4 text-[11px] text-[var(--text3)]">
             Chats del mes = replies en historias + chats en reels (métricas de contenido).
           </p>
         </>
       ) : step === 'CONVERSACIONES' ? (
         <>
-          <FunnelSetterReportsBreakdown month={month} metric="conversaciones" />
+          <FunnelSetterReportsBreakdown period={period} metric="conversaciones" />
           <p className="mt-4 text-[11px] text-[var(--text3)]">
             Conversaciones del mes = suma de reportes diarios del setter (misma fuente que el embudo).
           </p>
         </>
       ) : step === 'AGENDAS' ? (
         <>
-          <FunnelSetterReportsBreakdown month={month} metric="agendas" />
+          <FunnelSetterReportsBreakdown period={period} metric="agendas" />
           <p className="mt-4 text-[11px] text-[var(--text3)]">
             Agendas del mes = suma de reportes diarios del setter (misma fuente que el embudo).
           </p>
         </>
       ) : step === 'SHOWS' ? (
         <>
-          <FunnelLeadsBreakdown month={month} step="SHOWS" />
+          <FunnelLeadsBreakdown period={period} step="SHOWS" />
           <p className="mt-4 text-[11px] text-[var(--text3)]">
             Shows del mes = leads del mes con agenda y sin flag no-show (en vivo, sin depender de
             regenerar reportes).
@@ -1023,7 +1036,7 @@ function FunnelBreakdownModal({
         </>
       ) : step === 'CIERRES' ? (
         <>
-          <FunnelLeadsBreakdown month={month} step="CIERRES" />
+          <FunnelLeadsBreakdown period={period} step="CIERRES" />
           <p className="mt-4 text-[11px] text-[var(--text3)]">
             Cierres del mes = leads del mes con counts_as_cierre en el catálogo (en vivo, sin depender
             de regenerar reportes).
@@ -1035,7 +1048,7 @@ function FunnelBreakdownModal({
 }
 
 // ── Funnel Component ──
-function VDFunnel({ d, month }: { d: VDData; month: string }) {
+function VDFunnel({ d, period }: { d: VDData; period: AnalyticsPeriod }) {
   const [openStep, setOpenStep] = useState<FunnelLeadStep | null>(null)
 
   const steps: { label: FunnelLeadStep; value: number }[] = [
@@ -1120,7 +1133,7 @@ function VDFunnel({ d, month }: { d: VDData; month: string }) {
       step={openStep}
       open={openStep !== null}
       onClose={() => setOpenStep(null)}
-      month={month}
+      period={period}
       chatsStories={d.chatsStories}
       chatsReels={d.chatsReels}
     />
@@ -1129,7 +1142,7 @@ function VDFunnel({ d, month }: { d: VDData; month: string }) {
 }
 
 // ── MENSUAL ──
-function MensualView({ curr, prev, delta, month }: { curr: VDData; prev: VDData; delta: (k: keyof VDData) => number; month: string }) {
+function MensualView({ curr, prev, delta, period }: { curr: VDData; prev: VDData; delta: (k: keyof VDData) => number; period: AnalyticsPeriod }) {
   const [openMetric, setOpenMetric] = useState<MonthlyMetricId | null>(null)
   const chgIngresos = delta('ingresos')
   const progTotal = curr.programas.reduce((s, p) => s + p.ingresos, 0) || 1
@@ -1169,13 +1182,13 @@ function MensualView({ curr, prev, delta, month }: { curr: VDData; prev: VDData;
         </div>
         <div className="text-right">
           <div className={`text-[13px] font-semibold ${chgIngresos >= 0 ? 'text-[var(--green)]' : 'text-[var(--text2)]'}`}>
-            {chgIngresos >= 0 ? '▲' : '▼'} {Math.abs(chgIngresos).toFixed(1)}% vs mes ant.
+            {chgIngresos >= 0 ? '▲' : '▼'} {Math.abs(chgIngresos).toFixed(1)}% vs período ant.
           </div>
         </div>
       </div>
 
       {/* Funnel */}
-      <VDFunnel d={curr} month={month} />
+      <VDFunnel d={curr} period={period} />
 
       {/* KPIs del mes */}
       <div className="text-[11px] font-medium uppercase tracking-widest text-[var(--text3)]">Metricas del Mes</div>
@@ -1285,7 +1298,7 @@ function MensualView({ curr, prev, delta, month }: { curr: VDData; prev: VDData;
 
 // ── SEMANAL ──
 function SemanalView({ curr }: { curr: VDData }) {
-  const weeks = ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4']
+  const weeks = curr.weekLabels.length > 0 ? curr.weekLabels : ['—']
   const showUpRates = curr.agendasByWeek.map((a, i) => {
     const sh = curr.showsByWeek[i] ?? 0
     if (a > 0) return (sh / a) * 100
@@ -1361,16 +1374,14 @@ function SemanalView({ curr }: { curr: VDData }) {
 }
 
 // ── DIARIO ──
-function DiarioView({ curr, semana, setSemana }: { curr: VDData; semana: number; setSemana: (s: number) => void }) {
-  const days = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom']
-  const wd = curr.byWeekDay
-  const w = semana
-  const conv = wd.conversaciones[w]
-  const agendas = wd.agendas[w]
-  const shows = wd.shows[w]
-  const noShowsD = wd.noShows[w]
-  const cierres = wd.cierres[w]
-  const ingresos = wd.ingresos[w]
+function DiarioView({ curr }: { curr: VDData }) {
+  const days = curr.dayLabels.length > 0 ? curr.dayLabels : ['—']
+  const conv = curr.byDay.conversaciones
+  const agendas = curr.byDay.agendas
+  const shows = curr.byDay.shows
+  const noShowsD = curr.byDay.noShows
+  const cierres = curr.byDay.cierres
+  const ingresos = curr.byDay.ingresos
   const showUpD = agendas.map((a, i) => {
     const s = shows[i] ?? 0
     if (a > 0) return (s / a) * 100
@@ -1416,19 +1427,8 @@ function DiarioView({ curr, semana, setSemana }: { curr: VDData; semana: number;
 
   return (
     <div className="space-y-6">
-      {/* Week selector */}
-      <div className="segment-group w-fit">
-        {[0, 1, 2, 3].map(i => (
-          <button key={i} onClick={() => setSemana(i)}
-            className={`segment-tab ${semana === i ? 'segment-tab-active font-semibold' : ''}`}>
-            Semana {i + 1}
-          </button>
-        ))}
-      </div>
-
-      {/* Table */}
-      <div className="glass-card overflow-hidden">
-        <table className="w-full">
+      <div className="glass-card overflow-x-auto">
+        <table className="w-full min-w-[640px]">
           <thead>
             <tr className="border-b border-[var(--border)]">
               <th className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">Metrica</th>
@@ -1450,15 +1450,14 @@ function DiarioView({ curr, semana, setSemana }: { curr: VDData; semana: number;
         </table>
       </div>
 
-      {/* Charts */}
       <div className="grid grid-cols-2 gap-4">
-        <ChartCard title={`Agendas diarias — Semana ${semana + 1}`} value={String(agendas.reduce((s, v) => s + v, 0))} subtitle="total">
+        <ChartCard title="Agendas diarias" value={String(agendas.reduce((s, v) => s + v, 0))} subtitle="rango seleccionado">
           <Bar data={{ labels: days, datasets: [{ data: agendas, backgroundColor: 'rgba(245,158,11,0.25)', hoverBackgroundColor: '#F59E0B', borderRadius: 6, borderSkipped: false, barPercentage: 0.6, categoryPercentage: 0.8 }] }}
-            options={{ responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.6)', font: { size: 11 } } }, y: { grid: { color: 'rgba(255,255,255,0.03)', drawTicks: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.4)', font: { size: 10 }, padding: 8, maxTicksLimit: 4 } } }, plugins: { tooltip: { backgroundColor: 'rgba(0,0,0,0.85)', padding: 10, cornerRadius: 8, displayColors: false } } }} />
+            options={{ responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.6)', font: { size: 11 }, maxRotation: 60, minRotation: 0 } }, y: { grid: { color: 'rgba(255,255,255,0.03)', drawTicks: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.4)', font: { size: 10 }, padding: 8, maxTicksLimit: 4 } } }, plugins: { tooltip: { backgroundColor: 'rgba(0,0,0,0.85)', padding: 10, cornerRadius: 8, displayColors: false } } }} />
         </ChartCard>
-        <ChartCard title="Ingresos diarios" value={formatCash(ingresos.reduce((s, v) => s + v, 0))} subtitle="Pagó en vivo (leads del mes)">
+        <ChartCard title="Ingresos diarios" value={formatCash(ingresos.reduce((s, v) => s + v, 0))} subtitle="Pagó en vivo (leads del rango)">
           <Bar data={{ labels: days, datasets: [{ data: ingresos, backgroundColor: 'rgba(34,197,94,0.25)', hoverBackgroundColor: '#22C55E', borderRadius: 6, borderSkipped: false, barPercentage: 0.6, categoryPercentage: 0.8 }] }}
-            options={{ responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.6)', font: { size: 11 } } }, y: { grid: { color: 'rgba(255,255,255,0.03)', drawTicks: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.4)', font: { size: 10 }, padding: 8, maxTicksLimit: 4, callback: (v: string | number) => formatCashAxisShort(v) } } }, plugins: { tooltip: { backgroundColor: 'rgba(0,0,0,0.85)', padding: 10, cornerRadius: 8, displayColors: false, callbacks: { label: (ctx: { parsed: { y: number | null } }) => formatCash(ctx.parsed.y ?? 0) } } } }} />
+            options={{ responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.6)', font: { size: 11 }, maxRotation: 60, minRotation: 0 } }, y: { grid: { color: 'rgba(255,255,255,0.03)', drawTicks: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.4)', font: { size: 10 }, padding: 8, maxTicksLimit: 4, callback: (v: string | number) => formatCashAxisShort(v) } } }, plugins: { tooltip: { backgroundColor: 'rgba(0,0,0,0.85)', padding: 10, cornerRadius: 8, displayColors: false, callbacks: { label: (ctx: { parsed: { y: number | null } }) => formatCash(ctx.parsed.y ?? 0) } } } }} />
         </ChartCard>
       </div>
     </div>

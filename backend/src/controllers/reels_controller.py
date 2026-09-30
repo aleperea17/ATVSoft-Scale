@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -33,6 +34,8 @@ def list_reels(
     user_id: Annotated[str, Depends(require_user_id)],
     month: str | None = Query(default=None, description="Formato YYYY-MM"),
     months: str | None = Query(default=None, description="Varios meses YYYY-MM separados por coma (p. ej. comparación)"),
+    desde: date | None = Query(default=None, description="Inicio inclusive YYYY-MM-DD"),
+    hasta: date | None = Query(default=None, description="Fin inclusive YYYY-MM-DD"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=50),
     skip_agg: bool = Query(
@@ -41,7 +44,9 @@ def list_reels(
     ),
 ) -> ReelsListResponse:
     try:
-        return service.list_reels(user_id, month, page, page_size, months_csv=months, skip_agg=skip_agg)
+        return service.list_reels(
+            user_id, month, page, page_size, months_csv=months, skip_agg=skip_agg, desde=desde, hasta=hasta
+        )
     except HTTPException as e:
         raise e
     except Exception:
@@ -65,9 +70,11 @@ def get_metrics(
     user_id: Annotated[str, Depends(require_user_id)],
     month: str | None = Query(default=None, description="Formato YYYY-MM"),
     months: str | None = Query(default=None, description="Varios meses YYYY-MM separados por coma"),
+    desde: date | None = Query(default=None, description="Inicio inclusive YYYY-MM-DD"),
+    hasta: date | None = Query(default=None, description="Fin inclusive YYYY-MM-DD"),
 ) -> ReelsMetricsOut:
     try:
-        return service.get_metrics(user_id, month, months_csv=months)
+        return service.get_metrics(user_id, month, months_csv=months, desde=desde, hasta=hasta)
     except HTTPException as e:
         raise e
     except Exception:

@@ -21,6 +21,7 @@ from src.schemas import (
 )
 from src.services.agent_closer_service import list_llamadas_dia, list_llamadas_hoy
 from src.services.company_config_service import company_now, company_today, datetime_month_tuple
+from src.services.date_range_filter import in_inclusive_range, parse_optional_date_range, stored_wall_date
 from src.services.programs_services import (
     build_program_norm_price_map,
     program_price_usd_for_prog_raw,
@@ -155,6 +156,11 @@ def _lead_effective_dt(row: LeadEntity) -> datetime | None:
 def _lead_month_ar(row: LeadEntity) -> tuple[int, int] | None:
     """(año, mes) en la zona de la empresa; mismo criterio de calendario que métricas de reels."""
     return datetime_month_tuple(_lead_effective_dt(row))
+
+
+def _lead_effective_wall_date(row: LeadEntity) -> date | None:
+    """Día de calendario del datetime guardado (hora de pared), sin convertir UTC→Madrid."""
+    return stored_wall_date(_lead_effective_dt(row))
 
 
 def _lead_month_string_ar(row: LeadEntity) -> str | None:
@@ -348,6 +354,8 @@ def list_leads(
         default=None,
         description="YYYY-MM; filtra por fecha_bot o created_at (mes AR); primer contacto no afecta el mes",
     ),
+    desde: date | None = Query(default=None, description="Inicio de rango inclusive (YYYY-MM-DD). Con hasta, pisa month."),
+    hasta: date | None = Query(default=None, description="Fin de rango inclusive (YYYY-MM-DD)."),
     include_all: bool = Query(
         default=False,
         description="Si true, incluye leads sin agendo (p. ej. conteos por origen en dashboard marketing).",
@@ -358,8 +366,9 @@ def list_leads(
     except ValueError as e:
         raise HTTPException(status_code=400, detail="user_id inválido") from e
 
+    date_range = parse_optional_date_range(desde, hasta)
     month_key: tuple[int, int] | None = None
-    if month and str(month).strip():
+    if date_range is None and month and str(month).strip():
         month_key = _parse_month_query(month)
         if month_key is None:
             raise HTTPException(status_code=400, detail="Parámetro month inválido (usar YYYY-MM).")
@@ -373,7 +382,14 @@ def list_leads(
         ]
         if not include_all:
             rows = [r for r in rows if r.agendo is not None]
-        if month_key is not None:
+        if date_range is not None:
+            start_d, end_d = date_range
+            rows = [
+                r
+                for r in rows
+                if in_inclusive_range(_lead_effective_wall_date(r), start_d, end_d)
+            ]
+        elif month_key is not None:
             year_m, month_m = month_key
             rows = [
                 r

@@ -16,6 +16,12 @@ from src.services.closer_report_auto_service import (
     preview_closer_report,
 )
 from src.services.company_config_service import company_today, datetime_month_tuple
+from src.services.date_range_filter import (
+    in_inclusive_range,
+    parse_optional_date_range,
+    require_month_or_range,
+    stored_wall_date,
+)
 from src.services.discord_service import DiscordServices
 from src.services.lead_agenda_utils import lead_is_cuota_plazo
 from src.services.lead_statuses_services import (
@@ -46,6 +52,32 @@ def require_user_id(
 
 def _notas_str(val: str | None) -> str:
     return (val or "").strip()
+
+
+def _nonneg_int(val: int | None) -> int:
+    try:
+        n = int(val or 0)
+    except (TypeError, ValueError):
+        return 0
+    return n if n >= 0 else 0
+
+
+def _setter_conversaciones_total(
+    *,
+    outbounds: int | None = 0,
+    conversaciones_cta_regalo: int | None = 0,
+    conversaciones_cta_venta: int | None = 0,
+    conversacion_lead: int | None = 0,
+    formularios: int | None = 0,
+) -> int:
+    """Total persistido: bienvenidas IG + CTAs + conversación lead + formularios. Ignora el body.conversaciones."""
+    return (
+        _nonneg_int(outbounds)
+        + _nonneg_int(conversaciones_cta_regalo)
+        + _nonneg_int(conversaciones_cta_venta)
+        + _nonneg_int(conversacion_lead)
+        + _nonneg_int(formularios)
+    )
 
 
 def _setter_report_discord_payload(r: SetterReport) -> dict[str, Any]:
@@ -283,6 +315,9 @@ class SetterReportBody(BaseModel):
     seguimientos: int = 0
     outbounds: int = 0
     formularios: int = 0
+    conversaciones_cta_regalo: int = 0
+    conversaciones_cta_venta: int = 0
+    conversacion_lead: int = 0
     dia_bueno_malo: str | None = None
 
 
@@ -528,6 +563,14 @@ def save_setter_report(body: SetterReportBody, user_id: str = Depends(require_us
     uid = _parse_uid(user_id)
     member_name = ""
     result: ReportSavedOut
+    discord_payload: dict[str, Any] | None = None
+    conversaciones_calc = _setter_conversaciones_total(
+        outbounds=body.outbounds,
+        conversaciones_cta_regalo=body.conversaciones_cta_regalo,
+        conversaciones_cta_venta=body.conversaciones_cta_venta,
+        conversacion_lead=body.conversacion_lead,
+        formularios=body.formularios,
+    )
     with db_session:
         member = _get_active_member(uid, body.member_id, "setter")
         member_name = member.nombre
@@ -538,7 +581,7 @@ def save_setter_report(body: SetterReportBody, user_id: str = Depends(require_us
         ]
         if existing:
             r = existing[0]
-            r.conversaciones = body.conversaciones
+            r.conversaciones = conversaciones_calc
             r.agendas = body.agendas
             r.links_enviados = body.links_enviados
             r.conversaciones_stories = body.conversaciones_stories
@@ -556,6 +599,9 @@ def save_setter_report(body: SetterReportBody, user_id: str = Depends(require_us
             r.seguimientos = body.seguimientos
             r.outbounds = body.outbounds
             r.formularios = body.formularios
+            r.conversaciones_cta_regalo = _nonneg_int(body.conversaciones_cta_regalo)
+            r.conversaciones_cta_venta = _nonneg_int(body.conversaciones_cta_venta)
+            r.conversacion_lead = _nonneg_int(body.conversacion_lead)
             r.dia_bueno_malo = _notas_str(body.dia_bueno_malo)
             result = ReportSavedOut(id=r.id, updated=True)
         else:
@@ -563,7 +609,7 @@ def save_setter_report(body: SetterReportBody, user_id: str = Depends(require_us
                 user_id=uid,
                 member_id=body.member_id,
                 fecha=body.fecha,
-                conversaciones=body.conversaciones,
+                conversaciones=conversaciones_calc,
                 agendas=body.agendas,
                 links_enviados=body.links_enviados,
                 conversaciones_stories=body.conversaciones_stories,
@@ -581,13 +627,18 @@ def save_setter_report(body: SetterReportBody, user_id: str = Depends(require_us
                 seguimientos=body.seguimientos,
                 outbounds=body.outbounds,
                 formularios=body.formularios,
+                conversaciones_cta_regalo=_nonneg_int(body.conversaciones_cta_regalo),
+                conversaciones_cta_venta=_nonneg_int(body.conversaciones_cta_venta),
+                conversacion_lead=_nonneg_int(body.conversacion_lead),
                 dia_bueno_malo=_notas_str(body.dia_bueno_malo),
             )
             r.flush()
             result = ReportSavedOut(id=r.id, updated=False)
+        discord_payload = _setter_report_discord_payload(r)
 
     try:
-        discord_service.send_setter_report_to_discord(member_name, body.model_dump(mode="json"))
+        if discord_payload is not None:
+            discord_service.send_setter_report_to_discord(member_name, discord_payload)
     except Exception:
         pass
 
@@ -804,12 +855,23 @@ def save_seguimiento_report(
 
 @router.get("/seguimiento-reports/month")
 def seguimiento_reports_month(
-    month: str = Query(..., description="YYYY-MM"),
+    month: str | None = Query(default=None, description="YYYY-MM"),
+    desde: date | None = Query(default=None, description="Inicio inclusive YYYY-MM-DD"),
+    hasta: date | None = Query(default=None, description="Fin inclusive YYYY-MM-DD"),
     user_id: str = Depends(require_user_id),
 ) -> dict[str, Any]:
-    """Totales y filas del mes para sumar a cash collected en el dashboard de ventas."""
+    """Totales y filas del mes/rango para sumar a cash collected en el dashboard de ventas."""
     uid = _parse_uid(user_id)
-    start, end = _month_range(month)
+    pair = parse_optional_date_range(desde, hasta)
+    if pair is not None:
+        start, end = pair
+    elif month and str(month).strip():
+        start, end = _month_range(month)
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail="Se requiere month (YYYY-MM) o el par desde y hasta (YYYY-MM-DD).",
+        )
     with db_session:
         entries = [
             {"fecha": r.fecha.isoformat(), "monto": float(r.monto)}
@@ -860,7 +922,10 @@ def _norm_member_name(raw: str | None) -> str:
     return (raw or "").strip().casefold()
 
 
-def _live_closer_month_stats(uid: int, year: int, month: int) -> dict[str, dict[str, float | int]]:
+def _live_closer_stats_for_leads(
+    uid: int,
+    include_lead,
+) -> dict[str, dict[str, float | int]]:
     """Cierres/shows/calls/calif/ingreso en vivo desde Lead, indexado por nombre de closer."""
     empty = {
         "llamadas_agendadas": 0,
@@ -874,8 +939,7 @@ def _live_closer_month_stats(uid: int, year: int, month: int) -> dict[str, dict[
     for lead in list(Lead.select()):
         if int(lead.user_id) != uid:
             continue
-        mb = datetime_month_tuple(_lead_effective_dt_for_month(lead))
-        if mb != (year, month):
+        if not include_lead(lead):
             continue
         key = _norm_member_name(lead.closer)
         if not key:
@@ -902,14 +966,39 @@ def _live_closer_month_stats(uid: int, year: int, month: int) -> dict[str, dict[
     return by_name
 
 
+def _live_closer_month_stats(uid: int, year: int, month: int) -> dict[str, dict[str, float | int]]:
+    def include(lead: Lead) -> bool:
+        mb = datetime_month_tuple(_lead_effective_dt_for_month(lead))
+        return mb == (year, month)
+
+    return _live_closer_stats_for_leads(uid, include)
+
+
+def _live_closer_range_stats(uid: int, start: date, end: date) -> dict[str, dict[str, float | int]]:
+    def include(lead: Lead) -> bool:
+        d = stored_wall_date(_lead_effective_dt_for_month(lead))
+        return in_inclusive_range(d, start, end)
+
+    return _live_closer_stats_for_leads(uid, include)
+
+
 @router.get("/dashboard")
 def team_dashboard(
-    month: str = Query(..., description="YYYY-MM"),
+    month: str | None = Query(default=None, description="YYYY-MM"),
+    desde: date | None = Query(default=None, description="Inicio inclusive YYYY-MM-DD"),
+    hasta: date | None = Query(default=None, description="Fin inclusive YYYY-MM-DD"),
     user_id: str = Depends(require_user_id),
 ) -> TeamDashboardOut:
     uid = _parse_uid(user_id)
-    start, end = _month_range(month)
-    ym = month.strip()
+    date_range = require_month_or_range(month, desde, hasta)
+    if date_range is not None:
+        start, end = date_range
+        ym = (month or "").strip() or f"{start.year:04d}-{start.month:02d}"
+        live_mode = "range"
+    else:
+        start, end = _month_range((month or "").strip())
+        ym = (month or "").strip()
+        live_mode = "month"
 
     with db_session:
         setter_rows = [
@@ -918,7 +1007,10 @@ def team_dashboard(
             if r.user_id == uid and start <= r.fecha <= end
         ]
         total_conversaciones = sum(int(r.conversaciones) for r in setter_rows)
-        live_closers = _live_closer_month_stats(uid, start.year, start.month)
+        if live_mode == "range":
+            live_closers = _live_closer_range_stats(uid, start, end)
+        else:
+            live_closers = _live_closer_month_stats(uid, start.year, start.month)
 
         members_by_id = {m.id: m for m in _members_for_user(uid)}
 

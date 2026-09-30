@@ -485,18 +485,37 @@ async def download_story_image(url: str, user_id: str, story_id: str) -> str | N
 
 
 class StoriesService:
+    def _sequence_rows(
+        self,
+        user_id: str,
+        month: str | None = None,
+        start: date | None = None,
+        end: date | None = None,
+    ) -> list:
+        uid = int(user_id)
+        rows = [s for s in list(StorySequence.select()) if s.user_id == uid]
+        if start is not None and end is not None:
+            return [s for s in rows if start <= s.sequence_date <= end]
+        if not month:
+            raise HTTPException(status_code=400, detail="El parámetro month debe tener formato YYYY-MM.")
+        year, month_num = map(int, month.split("-"))
+        return [
+            s
+            for s in rows
+            if s.sequence_date.year == year and s.sequence_date.month == month_num
+        ]
+
     @db_session
-    def get_sequences(self, user_id: str, month: str) -> list[dict[str, Any]]:
-        print("[stories] get_sequences llamado con user_id:", user_id, "month:", month)
+    def get_sequences(
+        self,
+        user_id: str,
+        month: str | None = None,
+        start: date | None = None,
+        end: date | None = None,
+    ) -> list[dict[str, Any]]:
+        print("[stories] get_sequences llamado con user_id:", user_id, "month:", month, "start:", start, "end:", end)
         try:
-            year, month_num = map(int, month.split("-"))
-            rows = [
-                s
-                for s in list(StorySequence.select())
-                if s.user_id == int(user_id)
-                and s.sequence_date.year == year
-                and s.sequence_date.month == month_num
-            ]
+            rows = self._sequence_rows(user_id, month=month, start=start, end=end)
             for row in rows:
                 slides = sorted(list(row.slides), key=lambda s: (s.order_index, s.id))
                 for slide in slides:
@@ -700,17 +719,16 @@ class StoriesService:
         return True
 
     @db_session
-    def get_metrics(self, user_id: str, month: str) -> dict[str, int]:
-        print("[stories] get_metrics llamado con user_id:", user_id, "month:", month)
+    def get_metrics(
+        self,
+        user_id: str,
+        month: str | None = None,
+        start: date | None = None,
+        end: date | None = None,
+    ) -> dict[str, int]:
+        print("[stories] get_metrics llamado con user_id:", user_id, "month:", month, "start:", start, "end:", end)
         try:
-            year, month_num = map(int, month.split("-"))
-            rows = [
-                s
-                for s in list(StorySequence.select())
-                if s.user_id == int(user_id)
-                and s.sequence_date.year == year
-                and s.sequence_date.month == month_num
-            ]
+            rows = self._sequence_rows(user_id, month=month, start=start, end=end)
             chats_del_mes = sum(
                 sum(int(s.replies or 0) for s in seq.slides) for seq in rows
             )

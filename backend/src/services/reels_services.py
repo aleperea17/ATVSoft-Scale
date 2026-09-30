@@ -6,7 +6,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, time as dt_time, timezone
+from datetime import date, datetime, time as dt_time, timezone
 
 import certifi
 from fastapi import HTTPException
@@ -83,11 +83,29 @@ class ReelsServices:
             return dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc)
 
-    @classmethod
-    def _month_key_ar(cls, dt: datetime | None) -> str | None:
+    def _pub_date_ar(self, dt: datetime | None) -> date | None:
         if dt is None:
             return None
-        return cls._as_utc(dt).astimezone(get_company_tz()).strftime("%Y-%m")
+        return self._as_utc(dt).astimezone(get_company_tz()).date()
+
+    def _filter_reels_by_period(
+        self,
+        rows: list,
+        month: str | None,
+        months_csv: str | None,
+        desde: date | None,
+        hasta: date | None,
+    ) -> list:
+        from src.services.date_range_filter import parse_optional_date_range
+
+        pair = parse_optional_date_range(desde, hasta)
+        if pair is not None:
+            start, end = pair
+            return [r for r in rows if (d := self._pub_date_ar(r.fecha_publicacion)) is not None and start <= d <= end]
+        month_set = self._month_filter_set(month, months_csv)
+        if month_set is not None:
+            return [r for r in rows if self._month_key_ar(r.fecha_publicacion) in month_set]
+        return rows
 
     def _store_publication_utc(self, value: datetime) -> datetime:
         if value.tzinfo is None:
@@ -417,17 +435,17 @@ AND EXISTS (
         months_csv: str | None = None,
         *,
         skip_agg: bool = False,
+        desde: date | None = None,
+        hasta: date | None = None,
     ) -> ReelsListResponse:
         uid = int(user_id)
-        month_set = self._month_filter_set(month, months_csv)
         with db_session:
             rows = [r for r in list(ReelContent.select()) if r.user_id == uid]
             available_months = sorted(
                 {mk for r in rows if r.fecha_publicacion and (mk := self._month_key_ar(r.fecha_publicacion))},
                 reverse=True,
             )
-            if month_set is not None:
-                rows = [r for r in rows if self._month_key_ar(r.fecha_publicacion) in month_set]
+            rows = self._filter_reels_by_period(rows, month, months_csv, desde, hasta)
             rows.sort(
                 key=lambda r: self._as_utc(r.fecha_publicacion) if r.fecha_publicacion else datetime.min.replace(tzinfo=timezone.utc),
                 reverse=True,
@@ -617,14 +635,19 @@ AND EXISTS (
             pass
         return base
 
-    def get_metrics(self, user_id: str, month: str | None, months_csv: str | None = None) -> dict[str, int]:
+    def get_metrics(
+        self,
+        user_id: str,
+        month: str | None,
+        months_csv: str | None = None,
+        desde: date | None = None,
+        hasta: date | None = None,
+    ) -> dict[str, int]:
         uid = int(user_id)
         uid_str = str(uid)
-        month_set = self._month_filter_set(month, months_csv)
         with db_session:
             rows = [r for r in list(ReelContent.select()) if r.user_id == uid]
-            if month_set is not None:
-                rows = [r for r in rows if self._month_key_ar(r.fecha_publicacion) in month_set]
+            rows = self._filter_reels_by_period(rows, month, months_csv, desde, hasta)
             payloads = [{"cta": (r.cta or "").strip(), "reel": self._to_response(r)} for r in rows]
 
         chats_del_mes = 0

@@ -628,6 +628,9 @@ def _migrate_postgres_setter_report_text_columns() -> None:
                 f"ALTER TABLE {sql_table} ADD COLUMN IF NOT EXISTS seguimientos integer NOT NULL DEFAULT 0",
                 f"ALTER TABLE {sql_table} ADD COLUMN IF NOT EXISTS outbounds integer NOT NULL DEFAULT 0",
                 f"ALTER TABLE {sql_table} ADD COLUMN IF NOT EXISTS formularios integer NOT NULL DEFAULT 0",
+                f"ALTER TABLE {sql_table} ADD COLUMN IF NOT EXISTS conversaciones_cta_regalo integer NOT NULL DEFAULT 0",
+                f"ALTER TABLE {sql_table} ADD COLUMN IF NOT EXISTS conversaciones_cta_venta integer NOT NULL DEFAULT 0",
+                f"ALTER TABLE {sql_table} ADD COLUMN IF NOT EXISTS conversacion_lead integer NOT NULL DEFAULT 0",
                 f"ALTER TABLE {sql_table} ADD COLUMN IF NOT EXISTS dia_bueno_malo text NOT NULL DEFAULT ''",
             ):
                 try:

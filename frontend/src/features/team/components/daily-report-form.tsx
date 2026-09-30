@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
 import { useToast } from '@/shared/components/toast'
 import { formatCash } from '@/shared/lib/format-utils'
@@ -30,6 +30,9 @@ type DailyReport = {
   seguimientos: number
   outbounds: number
   formularios: number
+  conversaciones_cta_regalo: number
+  conversaciones_cta_venta: number
+  conversacion_lead: number
   dia_bueno_malo: string
 }
 
@@ -72,6 +75,9 @@ type NumKey =
   | 'seguimientos'
   | 'outbounds'
   | 'formularios'
+  | 'conversaciones_cta_regalo'
+  | 'conversaciones_cta_venta'
+  | 'conversacion_lead'
   | 'calls_scheduled'
   | 'shows'
   | 'cierres'
@@ -136,8 +142,27 @@ export function DailyReportSection({ role }: Props) {
     seguimientos: 0,
     outbounds: 0,
     formularios: 0,
+    conversaciones_cta_regalo: 0,
+    conversaciones_cta_venta: 0,
+    conversacion_lead: 0,
     dia_bueno_malo: '',
   })
+
+  const setterConversacionesTotal = useMemo(
+    () =>
+      (form.outbounds || 0) +
+      (form.conversaciones_cta_regalo || 0) +
+      (form.conversaciones_cta_venta || 0) +
+      (form.conversacion_lead || 0) +
+      (form.formularios || 0),
+    [
+      form.outbounds,
+      form.conversaciones_cta_regalo,
+      form.conversaciones_cta_venta,
+      form.conversacion_lead,
+      form.formularios,
+    ],
+  )
 
   const applyAvatarOptions = useCallback((names: string[]) => {
     const options = names.length > 0 ? names : FALLBACK_AVATAR_OPTIONS
@@ -333,8 +358,9 @@ export function DailyReportSection({ role }: Props) {
     label: string,
     isCurrency = false,
     labelClass = 'text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]',
+    readOnly = false,
   ) => {
-    const numVal = form[key] as number
+    const numVal = (readOnly && key === 'conversaciones' ? setterConversacionesTotal : (form[key] as number))
     const displayValue = numVal === 0 ? '' : numVal
     return (
       <div>
@@ -345,7 +371,10 @@ export function DailyReportSection({ role }: Props) {
           inputMode={isCurrency ? 'decimal' : undefined}
           min={isCurrency ? 0 : undefined}
           value={displayValue}
+          readOnly={readOnly}
+          tabIndex={readOnly ? -1 : undefined}
           onChange={(e) => {
+            if (readOnly) return
             const raw = e.target.value
             if (raw === '') {
               setForm((f) => ({ ...f, [key]: 0 }))
@@ -362,7 +391,7 @@ export function DailyReportSection({ role }: Props) {
             }))
           }}
           placeholder="0"
-          className="w-full rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-[13px] text-[var(--text)] outline-none focus:border-[var(--text3)]"
+          className={`w-full rounded-lg border border-[var(--border2)] px-3 py-2 text-[13px] text-[var(--text)] outline-none focus:border-[var(--text3)] ${readOnly ? 'cursor-default bg-[var(--bg)] text-[var(--text2)]' : 'bg-[var(--bg3)]'}`}
         />
       </div>
     )
@@ -405,7 +434,7 @@ export function DailyReportSection({ role }: Props) {
           body: JSON.stringify({
             member_id: form.memberId,
             fecha: form.date,
-            conversaciones: form.conversaciones,
+            conversaciones: setterConversacionesTotal,
             agendas: form.agendas,
             links_enviados: form.calendly_links,
             notas: null,
@@ -415,6 +444,9 @@ export function DailyReportSection({ role }: Props) {
             seguimientos: form.seguimientos,
             outbounds: form.outbounds,
             formularios: form.formularios,
+            conversaciones_cta_regalo: form.conversaciones_cta_regalo,
+            conversaciones_cta_venta: form.conversaciones_cta_venta,
+            conversacion_lead: form.conversacion_lead,
             dia_bueno_malo: form.dia_bueno_malo.trim() || null,
           }),
         })
@@ -630,14 +662,40 @@ export function DailyReportSection({ role }: Props) {
           </div>
 
           <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {numField('conversaciones', 'Conversaciones', false, 'text-[11px] font-medium leading-snug text-[var(--text2)]')}
             {numField('agendas', 'Agendas', false, 'text-[11px] font-medium leading-snug text-[var(--text2)]')}
             {numField('calendly_links', 'Calendlys enviados', false, 'text-[11px] font-medium leading-snug text-[var(--text2)]')}
+            {numField(
+              'conversaciones',
+              'Conversaciones (auto-suma)',
+              false,
+              'text-[11px] font-medium leading-snug text-[var(--text2)]',
+              true,
+            )}
           </div>
           <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
             {numField('seguimientos', 'Seguimientos', false, 'text-[11px] font-medium leading-snug text-[var(--text2)]')}
             {numField('outbounds', 'Bienvenidas IG', false, 'text-[11px] font-medium leading-snug text-[var(--text2)]')}
             {numField('formularios', 'Formularios', false, 'text-[11px] font-medium leading-snug text-[var(--text2)]')}
+          </div>
+          <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {numField(
+              'conversaciones_cta_regalo',
+              'Conversaciones CTA Regalo',
+              false,
+              'text-[11px] font-medium leading-snug text-[var(--text2)]',
+            )}
+            {numField(
+              'conversaciones_cta_venta',
+              'Conversaciones CTA Venta',
+              false,
+              'text-[11px] font-medium leading-snug text-[var(--text2)]',
+            )}
+            {numField(
+              'conversacion_lead',
+              'Conversación por parte del lead',
+              false,
+              'text-[11px] font-medium leading-snug text-[var(--text2)]',
+            )}
           </div>
           <div className="mb-4">
             <label className="mb-2 block text-[12px] font-medium leading-snug text-[var(--text)]">
@@ -690,12 +748,12 @@ export function DailyReportSection({ role }: Props) {
             )}
           </div>
 
-          {form.conversaciones > 0 && (
+          {setterConversacionesTotal > 0 && (
             <div className="mb-4 flex gap-6 rounded-lg border border-[var(--border)] bg-[var(--bg3)] p-3">
               <div className="text-[11px]">
                 <span className="text-[var(--text3)]">Tasa agend.:</span>{' '}
                 <span className="font-semibold text-[var(--accent)]">
-                  {form.conversaciones > 0 ? ((form.agendas / form.conversaciones) * 100).toFixed(1) : 0}%
+                  {setterConversacionesTotal > 0 ? ((form.agendas / setterConversacionesTotal) * 100).toFixed(1) : 0}%
                 </span>
               </div>
             </div>

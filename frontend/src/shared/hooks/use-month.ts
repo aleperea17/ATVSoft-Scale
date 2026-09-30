@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { monthKeyInCompanyTz } from '@/shared/lib/company-timezone'
+import { monthRangeIso } from '@/shared/lib/date-range'
 
 function getMonthLabel(month: string): string {
   const [year, m] = month.split('-').map(Number)
@@ -21,27 +22,66 @@ function getMonthOptions(timeZone: string): { value: string; label: string }[] {
   return options
 }
 
+function rangeForMonth(ym: string): { desde: string; hasta: string } {
+  return monthRangeIso(ym) ?? { desde: `${ym}-01`, hasta: `${ym}-01` }
+}
+
 export function useMonth(timeZone: string) {
-  const [month, setMonth] = useState(() => monthKeyInCompanyTz(timeZone))
+  const [month, setMonthState] = useState(() => monthKeyInCompanyTz(timeZone))
+  const [desde, setDesde] = useState(() => rangeForMonth(monthKeyInCompanyTz(timeZone)).desde)
+  const [hasta, setHasta] = useState(() => rangeForMonth(monthKeyInCompanyTz(timeZone)).hasta)
+
+  const setMonth = useCallback((ym: string) => {
+    setMonthState(ym)
+    const r = rangeForMonth(ym)
+    setDesde(r.desde)
+    setHasta(r.hasta)
+  }, [])
 
   useEffect(() => {
-    setMonth(monthKeyInCompanyTz(timeZone))
+    const ym = monthKeyInCompanyTz(timeZone)
+    setMonthState(ym)
+    const r = rangeForMonth(ym)
+    setDesde(r.desde)
+    setHasta(r.hasta)
   }, [timeZone])
 
   const options = getMonthOptions(timeZone)
   const label = getMonthLabel(month)
 
+  const setDateRange = useCallback((next: { desde: string; hasta: string }) => {
+    setDesde(next.desde)
+    setHasta(next.hasta)
+  }, [])
+
+  const applyThisMonth = useCallback(() => {
+    const r = rangeForMonth(month)
+    setDesde(r.desde)
+    setHasta(r.hasta)
+  }, [month])
+
   const prev = useCallback(() => {
     const [y, m] = month.split('-').map(Number)
     const d = new Date(y, m - 2, 1)
     setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
-  }, [month])
+  }, [month, setMonth])
 
   const next = useCallback(() => {
     const [y, m] = month.split('-').map(Number)
     const d = new Date(y, m, 1)
     setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
-  }, [month])
+  }, [month, setMonth])
 
-  return { month, setMonth, label, options, prev, next }
+  return {
+    month,
+    setMonth,
+    label,
+    options,
+    prev,
+    next,
+    desde,
+    hasta,
+    setDateRange,
+    applyThisMonth,
+  }
 }

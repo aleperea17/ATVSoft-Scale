@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -12,6 +12,7 @@ from src.schemas import (
     StorySequencePatchRequest,
 )
 from src.services.company_config_service import company_month_key
+from src.services.date_range_filter import parse_optional_date_range
 from src.services.stories_service import StoriesService
 
 router = APIRouter(prefix="/api/stories", tags=["stories"], redirect_slashes=False)
@@ -33,6 +34,8 @@ def get_current_user(
 def get_sequences(
     user_id: Annotated[str, Depends(get_current_user)],
     month: str | None = Query(default=None, description="Formato YYYY-MM"),
+    desde: date | None = Query(default=None, description="Inicio inclusive YYYY-MM-DD"),
+    hasta: date | None = Query(default=None, description="Fin inclusive YYYY-MM-DD"),
     all_months: bool = Query(
         default=False,
         description="Si es true, devuelve todas las secuencias del usuario (ignora month).",
@@ -41,6 +44,9 @@ def get_sequences(
     try:
         if all_months:
             return service.get_all_sequences(user_id)
+        pair = parse_optional_date_range(desde, hasta)
+        if pair is not None:
+            return service.get_sequences(user_id, month=None, start=pair[0], end=pair[1])
         effective_month = month or company_month_key()
         return service.get_sequences(user_id, effective_month)
     except HTTPException as e:
@@ -151,8 +157,13 @@ def delete_slide(
 def get_metrics(
     user_id: Annotated[str, Depends(get_current_user)],
     month: str | None = Query(default=None, description="Formato YYYY-MM"),
+    desde: date | None = Query(default=None, description="Inicio inclusive YYYY-MM-DD"),
+    hasta: date | None = Query(default=None, description="Fin inclusive YYYY-MM-DD"),
 ) -> StoriesMetricsOut:
     try:
+        pair = parse_optional_date_range(desde, hasta)
+        if pair is not None:
+            return service.get_metrics(user_id, month=None, start=pair[0], end=pair[1])
         effective_month = month or company_month_key()
         return service.get_metrics(user_id, effective_month)
     except HTTPException as e:
