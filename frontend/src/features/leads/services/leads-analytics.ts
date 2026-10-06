@@ -64,6 +64,8 @@ export type LeadsFunnel = {
 
 export type WeekMetrics = {
   agendas: number[]
+  /** Leads del bucket con `leadHasAgenda` (misma fecha efectiva que shows). */
+  agendasCrm: number[]
   conversaciones: number[]
   shows: number[]
   cierres: number[]
@@ -103,6 +105,8 @@ export type LeadsAnalytics = LeadsFunnel & {
   cashCollectedComposition: CashCollectedComposition
   ingresosBase: IngresosBase
   pagosSinFechaCobro: number
+  /** Leads del período con `leadHasAgenda` (fecha de llamada; no reportes setter). */
+  agendasCrm: number
 }
 
 export type MemberMetrics = LeadsFunnel & {
@@ -279,6 +283,7 @@ function emptyMetrics(n: number): WeekMetrics {
   const z = () => Array.from({ length: n }, () => 0)
   return {
     agendas: z(),
+    agendasCrm: z(),
     conversaciones: z(),
     shows: z(),
     cierres: z(),
@@ -287,6 +292,11 @@ function emptyMetrics(n: number): WeekMetrics {
     facturacion: z(),
     noShows: z(),
   }
+}
+
+/** Show Up Rate: shows CRM ÷ llamadas agendadas CRM. 0 si no hay denominador. */
+export function showUpRatePct(shows: number, agendasCrm: number): number {
+  return agendasCrm > 0 ? (shows / agendasCrm) * 100 : 0
 }
 
 function resolveAnalyticsPeriod(input: string | AnalyticsPeriod): AnalyticsPeriod {
@@ -434,6 +444,8 @@ export async function getLeadsAnalytics(
 
   const conversaciones = sumField(setterReports, 'conversaciones')
   const agendas = sumField(setterReports, 'agendas')
+  /** Mismo conjunto y fecha efectiva que shows (`GET /leads` + `leadHasAgenda`). */
+  const agendasCrm = leads.filter(leadHasAgenda).length
   /** Shows / cierres en vivo: flag del catálogo LeadStatusType (no CloserReport congelado). */
   const shows = leads.filter(leadHasShow).length
   const cierres = leads.filter(leadIsCierre).length
@@ -507,7 +519,7 @@ export async function getLeadsAnalytics(
     ingresos: cashCollected,
     facturacion,
     closeRate: shows > 0 ? (cierres / shows) * 100 : 0,
-    showUpRate: agendas > 0 ? (shows / agendas) * 100 : 0,
+    showUpRate: showUpRatePct(shows, agendasCrm),
     tasaAgendamiento: conversaciones > 0 ? (agendas / conversaciones) * 100 : 0,
     cashPorAgenda: agendas > 0 ? cashCall / agendas : 0,
     cashPorShow: shows > 0 ? cashCall / shows : 0,
@@ -567,6 +579,7 @@ export async function getLeadsAnalytics(
     const di = dayIndexFor(iso)
     const bump = (target: WeekMetrics, idx: number) => {
       if (idx < 0) return
+      if (leadHasAgenda(l)) target.agendasCrm[idx] += 1
       if (leadHasShow(l)) target.shows[idx] += 1
       if (leadIsCierre(l)) target.cierres[idx] += 1
       if (resolveLeadStatusFlags(String(l.status ?? ''), _statusCatalog).counts_as_no_show) {
@@ -629,6 +642,7 @@ export async function getLeadsAnalytics(
       },
       ingresosBase,
       pagosSinFechaCobro,
+      agendasCrm,
     },
   }
 }

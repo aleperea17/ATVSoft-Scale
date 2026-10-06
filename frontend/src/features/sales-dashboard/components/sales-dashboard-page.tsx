@@ -13,6 +13,7 @@ import {
   filterLeadsForFunnelStep,
   sortLeadsForFunnelStep,
   setLeadStatusCatalog,
+  showUpRatePct,
   type AnalyticsPeriod,
   type FunnelLeadStep,
   type LeadRow,
@@ -57,6 +58,7 @@ export function SalesDashboardPage() {
       chatsStories: analytics.chatsStories,
       chatsReels: analytics.chatsReels,
       agendasByWeek: analytics.byWeek.agendas,
+      agendasCrmByWeek: analytics.byWeek.agendasCrm,
       conversacionesByWeek: analytics.byWeek.conversaciones,
       showsByWeek: analytics.byWeek.shows,
       cierresByWeek: analytics.byWeek.cierres,
@@ -179,6 +181,7 @@ type MonthlyMetricId =
   | 'cash'
   | 'conversaciones'
   | 'agendas'
+  | 'agendasCrm'
   | 'noShows'
   | 'showUpRate'
   | 'closeRate'
@@ -240,6 +243,21 @@ function getMetricExplanation(id: MonthlyMetricId, d: VDData): MetricExplanation
         ],
         source: 'Fuente: reportes setter (/team/reports) — llamadas agendadas por canal.',
       }
+    case 'agendasCrm':
+      return {
+        title: 'Llamadas agendadas (CRM)',
+        result: fN(d.agendasCrm),
+        formula:
+          'Leads del período con agenda en el CRM (misma fecha efectiva de llamada que Shows), excluyendo cuotas de plazo.',
+        data: [
+          { label: 'Llamadas agendadas (CRM)', value: fN(d.agendasCrm) },
+          { label: 'Shows', value: fN(d.shows) },
+          { label: 'No Shows (KPI, catálogo)', value: fN(d.noShows) },
+          { label: 'Agendas (setter)', value: fN(d.agendas) },
+        ],
+        source:
+          'Fuente: GET /leads (fecha de llamada) + leadHasAgenda. Agendas del setter es otro conteo: lo que el equipo reportó el día que agendó.',
+      }
     case 'noShows':
       return {
         title: 'No Shows',
@@ -256,13 +274,17 @@ function getMetricExplanation(id: MonthlyMetricId, d: VDData): MetricExplanation
       return {
         title: 'Show Up Rate',
         result: fP(d.showUpRate),
-        formula: '(Shows ÷ Agendas) × 100',
+        formula:
+          d.agendasCrm > 0
+            ? '(Shows ÷ Llamadas agendadas (CRM)) × 100'
+            : 'Sin llamadas agendadas en el CRM: Show Up Rate = 0 %.',
         data: [
           { label: 'Shows', value: fN(d.shows) },
-          { label: 'Agendas', value: fN(d.agendas) },
+          { label: 'Llamadas agendadas (CRM)', value: fN(d.agendasCrm) },
           { label: 'Show up rate', value: fP(d.showUpRate) },
         ],
-        source: 'Fuente: shows = leads en vivo (no no-show); agendas = reportes setter del mes.',
+        source:
+          'Shows y Llamadas agendadas (CRM) son leads con llamada en el período (leadHasShow / leadHasAgenda). Agendas es lo que reporta el setter el día que agendó; no es el denominador de esta tasa.',
       }
     case 'closeRate':
       return {
@@ -452,11 +474,13 @@ function funnelStepBreakdown(
   step: FunnelLeadStep,
   d: VDData,
 ): { label: string; value: number }[] {
-  if (step !== 'CHATS') return []
-  return [
-    { label: 'Historias', value: d.chatsStories },
-    { label: 'Reels', value: d.chatsReels },
-  ]
+  if (step === 'CHATS') {
+    return [
+      { label: 'Historias', value: d.chatsStories },
+      { label: 'Reels', value: d.chatsReels },
+    ]
+  }
+  return []
 }
 
 function FunnelMiniBreakdown({
@@ -1146,11 +1170,17 @@ function VDFunnel({ d, period }: { d: VDData; period: AnalyticsPeriod }) {
                 <div className="font-mono-num text-[22px] font-bold" style={{ color: segment.valueColor }}>
                   {s.value}
                 </div>
-                <FunnelMiniBreakdown
-                  items={funnelStepBreakdown(s.label, d)}
-                  labelColor={segment.labelColor}
-                  valueColor={segment.valueColor}
-                />
+                {s.label === 'SHOWS' ? (
+                  <div className="mt-0.5 text-[9px] font-medium" style={{ color: segment.labelColor }}>
+                    de {fN(d.agendasCrm)} llamadas agendadas
+                  </div>
+                ) : (
+                  <FunnelMiniBreakdown
+                    items={funnelStepBreakdown(s.label, d)}
+                    labelColor={segment.labelColor}
+                    valueColor={segment.valueColor}
+                  />
+                )}
               </div>
             </button>
             )
@@ -1327,6 +1357,7 @@ function MensualView({ curr, prev, delta, period }: { curr: VDData; prev: VDData
                 { label: curr.ingresosBase === 'pago' ? 'Ingresos cobrados' : 'Cash del mes', metricId: 'cash' as const, pv: formatCash(prev.ingresos), cv: formatCash(curr.ingresos), chg: delta('ingresos') },
                 { label: 'Conversaciones', metricId: 'conversaciones' as const, pv: fN(prev.conversaciones), cv: fN(curr.conversaciones), chg: delta('conversaciones') },
                 { label: 'Agendas', metricId: 'agendas' as const, pv: fN(prev.agendas), cv: fN(curr.agendas), chg: delta('agendas') },
+                { label: 'Llamadas agendadas (CRM)', metricId: 'agendasCrm' as const, pv: fN(prev.agendasCrm), cv: fN(curr.agendasCrm), chg: delta('agendasCrm') },
                 { label: 'No Shows', metricId: 'noShows' as const, pv: fN(prev.noShows), cv: fN(curr.noShows), chg: delta('noShows') },
                 { label: 'Show Up Rate', metricId: 'showUpRate' as const, pv: fP(prev.showUpRate), cv: fP(curr.showUpRate), chg: delta('showUpRate') },
                 { label: 'Close Rate', metricId: 'closeRate' as const, pv: fP(prev.closeRate), cv: fP(curr.closeRate), chg: delta('closeRate') },
@@ -1361,9 +1392,9 @@ function MensualView({ curr, prev, delta, period }: { curr: VDData; prev: VDData
 // ── SEMANAL ──
 function SemanalView({ curr }: { curr: VDData }) {
   const weeks = curr.weekLabels.length > 0 ? curr.weekLabels : ['—']
-  const showUpRates = curr.agendasByWeek.map((a, i) => {
+  const showUpRates = curr.agendasCrmByWeek.map((a, i) => {
     const sh = curr.showsByWeek[i] ?? 0
-    if (a > 0) return (sh / a) * 100
+    if (a > 0) return showUpRatePct(sh, a)
     return sh > 0 ? Number.NaN : 0
   })
   const closeRates = curr.showsByWeek.map((s, i) => {
@@ -1440,13 +1471,14 @@ function DiarioView({ curr }: { curr: VDData }) {
   const days = curr.dayLabels.length > 0 ? curr.dayLabels : ['—']
   const conv = curr.byDay.conversaciones
   const agendas = curr.byDay.agendas
+  const agendasCrmD = curr.byDay.agendasCrm
   const shows = curr.byDay.shows
   const noShowsD = curr.byDay.noShows
   const cierres = curr.byDay.cierres
   const ingresos = curr.byDay.ingresos
-  const showUpD = agendas.map((a, i) => {
+  const showUpD = agendasCrmD.map((a, i) => {
     const s = shows[i] ?? 0
-    if (a > 0) return (s / a) * 100
+    if (a > 0) return showUpRatePct(s, a)
     return s > 0 ? Number.NaN : 0
   })
   const closeD = shows.map((s, i) => {
@@ -1459,6 +1491,7 @@ function DiarioView({ curr }: { curr: VDData }) {
 
   const sum = (arr: number[]) => arr.reduce((s, v) => s + v, 0)
   const sumAg = sum(agendas)
+  const sumAgCrm = sum(agendasCrmD)
   const sumSh = sum(shows)
   const sumCi = sum(cierres)
   const sumIng = sum(ingresos)
@@ -1475,7 +1508,7 @@ function DiarioView({ curr }: { curr: VDData }) {
     {
       label: 'Show Up Rate',
       data: showUpD,
-      total: sumAg > 0 ? (sumSh / sumAg) * 100 : sumSh > 0 ? Number.NaN : 0,
+      total: sumAgCrm > 0 ? showUpRatePct(sumSh, sumAgCrm) : sumSh > 0 ? Number.NaN : 0,
       fmt: fPOrDash,
     },
     {
