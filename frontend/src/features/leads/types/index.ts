@@ -47,6 +47,8 @@ export type Lead = {
   program_price_usd?: number | null
   revenue: number
   payment: number
+  /** YYYY-MM-DD cobro (null si no hay pago). */
+  fecha_cobro?: string | null
   owed: number
   closer: string | null
   setter: string | null
@@ -223,6 +225,14 @@ export function buildColumns(
     },
     { key: 'program_offered', label: 'Prog. comprado', width: 130, type: 'badge', editable: true, options: progOpts, colors: progColors, defaultVisible: true },
     { key: 'payment', label: 'Pagó', width: 100, type: 'currency', editable: true, defaultVisible: true },
+    {
+      key: 'fecha_cobro',
+      label: 'Fecha de cobro',
+      width: 130,
+      type: 'date',
+      editable: true,
+      defaultVisible: true,
+    },
     { key: 'owed', label: 'Debe', width: 100, type: 'currency', editable: true, defaultVisible: true },
     // Calificación Calendly
     { key: 'compromiso', label: 'Compromiso', width: 200, type: 'text', editable: true, defaultVisible: false },

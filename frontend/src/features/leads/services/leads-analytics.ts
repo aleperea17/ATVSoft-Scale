@@ -12,9 +12,15 @@ import {
   monthRangeIso,
   periodQueryString,
 } from '@/shared/lib/date-range'
+import {
+  type IngresosBase,
+  leadCallWallDateIso,
+  leadCobroWallDateIso,
+  leadFechaCobroIso,
+} from '@/shared/lib/lead-cobro'
 
 export { monthRangeIso }
-export type { AnalyticsPeriod }
+export type { AnalyticsPeriod, IngresosBase }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // TYPES
@@ -24,6 +30,8 @@ export type LeadRow = Record<string, unknown> & {
   email?: string | null
   ingresos_rango?: string | null
   es_cuota_plazo?: boolean | null
+  fecha_cobro?: string | null
+  payment?: number | null
 }
 
 let _statusCatalog: LeadStatusCatalogItem[] | null = null
@@ -59,8 +67,10 @@ export type WeekMetrics = {
   conversaciones: number[]
   shows: number[]
   cierres: number[]
-  /** Cash por bucket: suma en vivo de `Lead.pago`. El embudo mensual `ingresos` sigue siendo Pagó + seguimiento. */
+  /** Cash por bucket: suma en vivo de `Lead.pago` (fecha de llamada). */
   ingresos: number[]
+  /** Cash por bucket según fecha de cobro (y fallback de llamada si fecha_cobro es null). */
+  ingresosPago: number[]
   /** Facturación en euros (mismo criterio que `funnel.facturacion` / `leadFacturacionUsd`) por bucket semanal. */
   facturacion: number[]
   noShows: number[]
@@ -91,6 +101,8 @@ export type LeadsAnalytics = LeadsFunnel & {
   byWeek: WeekMetrics
   byDay: WeekMetrics
   cashCollectedComposition: CashCollectedComposition
+  ingresosBase: IngresosBase
+  pagosSinFechaCobro: number
 }
 
 export type MemberMetrics = LeadsFunnel & {
@@ -258,17 +270,9 @@ function resolveProgramPrice(programPrices: Record<string, number>, progRaw: unk
   return null
 }
 
-/** ISO `YYYY-MM-DD` para bucket semanal/diario de facturación en leads. */
+/** ISO `YYYY-MM-DD` para bucket semanal/diario (fecha de llamada). */
 function leadMetricDateIso(l: LeadRow): string | null {
-  // Mismo orden que GET /leads ?month= (call > agendo > fecha_bot > created_at/`date`).
-  const candidates = [l.call, l.scheduled_at, l.call_at, l.agendo, l.fecha_bot, l.date]
-  for (const c of candidates) {
-    const s = String(c ?? '').trim()
-    if (!s) continue
-    const head = s.slice(0, 10)
-    if (/^\d{4}-\d{2}-\d{2}$/.test(head)) return head
-  }
-  return null
+  return leadCallWallDateIso(l)
 }
 
 function emptyMetrics(n: number): WeekMetrics {
@@ -279,6 +283,7 @@ function emptyMetrics(n: number): WeekMetrics {
     shows: z(),
     cierres: z(),
     ingresos: z(),
+    ingresosPago: z(),
     facturacion: z(),
     noShows: z(),
   }
@@ -291,6 +296,7 @@ function resolveAnalyticsPeriod(input: string | AnalyticsPeriod): AnalyticsPerio
 
 export async function getLeadsAnalytics(
   monthOrPeriod: string | AnalyticsPeriod,
+  opts?: { ingresosBase?: IngresosBase },
 ): Promise<{ leads: LeadRow[]; analytics: LeadsAnalytics; conversaciones: number }> {
   try {
     const stRes = await apiFetch('/lead-statuses')
@@ -308,11 +314,13 @@ export async function getLeadsAnalytics(
   let programPrices: Record<string, number> = {}
 
   const period = resolveAnalyticsPeriod(monthOrPeriod)
+  const ingresosBase: IngresosBase = opts?.ingresosBase === 'pago' ? 'pago' : 'llamada'
   const bucketRange = displayRangeForPeriod(period)
   const q = periodQueryString(period)
   let seguimientoTotal = 0
   let chatsReels = 0
   let chatsStories = 0
+  const pagoLeads: LeadRow[] = []
   try {
     const leadsReq = apiFetch(`/leads?${q}`)
     const programsReq = apiFetch('/programs')
@@ -322,17 +330,25 @@ export async function getLeadsAnalytics(
     const reportsReq = apiFetch(
       `/team/reports?desde=${encodeURIComponent(bucketRange.desde)}&hasta=${encodeURIComponent(bucketRange.hasta)}`,
     )
-    const [leadsRes, repRes, progRes, segRes, reelsMetricsRes, storiesMetricsRes] = await Promise.all([
-      leadsReq,
-      reportsReq,
-      programsReq,
-      segReq,
-      reelsMetricsReq,
-      storiesMetricsReq,
-    ])
+    const pagoLeadsReq =
+      ingresosBase === 'pago' ? apiFetch(`/leads?${q}&base=pago`) : Promise.resolve(null)
+    const [leadsRes, repRes, progRes, segRes, reelsMetricsRes, storiesMetricsRes, pagoLeadsRes] =
+      await Promise.all([
+        leadsReq,
+        reportsReq,
+        programsReq,
+        segReq,
+        reelsMetricsReq,
+        storiesMetricsReq,
+        pagoLeadsReq,
+      ])
     if (leadsRes.ok) {
       const j = (await leadsRes.json().catch(() => ({}))) as { leads?: LeadRow[] }
       if (Array.isArray(j.leads)) leads.push(...j.leads)
+    }
+    if (pagoLeadsRes && pagoLeadsRes.ok) {
+      const pjPago = (await pagoLeadsRes.json().catch(() => ({}))) as { leads?: LeadRow[] }
+      if (Array.isArray(pjPago.leads)) pagoLeads.push(...pjPago.leads)
     }
     if (progRes.ok) {
       const pj = (await progRes.json().catch(() => ({}))) as {
@@ -437,8 +453,15 @@ export async function getLeadsAnalytics(
   /** Ingreso declarado en reportes closer (solo fallback facturación si no hay programa en leads). */
   const ingresosReports = sumField(closerReports, 'ingreso')
   const cashFromLeadsPayments = leads.reduce((s, l) => s + (Number(l.payment) || 0), 0)
-  /** Cash collected = suma columna Pagó (`payment`) en leads del mes + montos de formularios de seguimiento. */
-  const cashCollected = cashFromLeadsPayments + seguimientoTotal
+  const cashFromPagoLeads = pagoLeads.reduce((s, l) => s + (Number(l.payment) || 0), 0)
+  const pagosSinFechaCobro =
+    ingresosBase === 'pago'
+      ? pagoLeads.filter((l) => (Number(l.payment) || 0) > 0 && !leadFechaCobroIso(l)).length
+      : 0
+  /** Seguimiento usa su propia `fecha`; no se cruza con `lead.pago` (fuentes distintas). */
+  const cashCall = cashFromLeadsPayments + seguimientoTotal
+  const cashPago = cashFromPagoLeads + seguimientoTotal
+  const cashCollected = ingresosBase === 'pago' ? cashPago : cashCall
 
   const catalogDefined = Object.keys(programPrices).length > 0
   const leadsWithProgramOfferedCount = leads.filter(
@@ -486,10 +509,10 @@ export async function getLeadsAnalytics(
     closeRate: shows > 0 ? (cierres / shows) * 100 : 0,
     showUpRate: agendas > 0 ? (shows / agendas) * 100 : 0,
     tasaAgendamiento: conversaciones > 0 ? (agendas / conversaciones) * 100 : 0,
-    cashPorAgenda: agendas > 0 ? cashCollected / agendas : 0,
-    cashPorShow: shows > 0 ? cashCollected / shows : 0,
-    // AOV = cash collected ÷ cantidad de ventas
-    aov: ventas > 0 ? cashCollected / ventas : 0,
+    cashPorAgenda: agendas > 0 ? cashCall / agendas : 0,
+    cashPorShow: shows > 0 ? cashCall / shows : 0,
+    // AOV = cash collected (cohorte llamada) ÷ cantidad de ventas
+    aov: ventas > 0 ? cashCall / ventas : 0,
   }
 
   // Programs breakdown (solo programa comprado / facturación; no `programada_ofrecido_llamada`)
@@ -556,6 +579,18 @@ export async function getLeadsAnalytics(
     bump(byDay, di)
   })
 
+  const cashBucketLeads = ingresosBase === 'pago' ? pagoLeads : []
+  cashBucketLeads.forEach((l) => {
+    const iso = leadCobroWallDateIso(l)
+    if (!iso) return
+    const w = weekIndexFor(iso)
+    const di = dayIndexFor(iso)
+    const pago = Number(l.payment) || 0
+    if (pago === 0) return
+    if (w >= 0) byWeek.ingresosPago[w] += pago
+    if (di >= 0) byDay.ingresosPago[di] += pago
+  })
+
   leads.forEach((l) => {
     const bill = leadFacturacionUsd(l)
     if (bill <= 0) return
@@ -589,9 +624,11 @@ export async function getLeadsAnalytics(
       byWeek,
       byDay,
       cashCollectedComposition: {
-        pago: cashFromLeadsPayments,
+        pago: ingresosBase === 'pago' ? cashFromPagoLeads : cashFromLeadsPayments,
         seguimiento: seguimientoTotal,
       },
+      ingresosBase,
+      pagosSinFechaCobro,
     },
   }
 }

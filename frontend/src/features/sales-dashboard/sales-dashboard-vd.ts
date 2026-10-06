@@ -10,5 +10,7 @@ export type VDData = LeadsAnalytics & {
   showsByWeek: number[]
   cierresByWeek: number[]
   ingresosByWeek: number[]
+  ingresosCohorteByWeek: number[]
+  ingresosCohorteByDay: number[]
   noShowsByWeek: number[]
 }

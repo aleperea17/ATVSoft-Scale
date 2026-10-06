@@ -10,6 +10,13 @@ export function isIsoDate(s: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(s.trim())
 }
 
+/** Fecha lista para aplicar al contexto (nativo incompleto emite `''`). */
+export function isCommittedIsoDate(s: string): boolean {
+  if (!isIsoDate(s)) return false
+  const y = Number(s.slice(0, 4))
+  return y >= 2000 && y <= 2100
+}
+
 export function monthRangeIso(month: string): { desde: string; hasta: string } | null {
   const m = /^(\d{4})-(\d{2})$/.exec(month.trim())
   if (!m) return null

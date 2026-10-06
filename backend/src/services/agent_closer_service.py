@@ -65,6 +65,11 @@ def _llamada_item(l: Lead) -> dict:
         "status": status,
         "payment": float(l.pago or 0),
         "owed": float(l.debe or 0),
+        "fecha_cobro": (
+            l.fecha_cobro.isoformat()
+            if isinstance(getattr(l, "fecha_cobro", None), date)
+            else None
+        ),
         "program_offered": (l.programa_ofrecido or "").strip(),
         "programada_ofrecido_llamada": (l.programada_ofrecido_llamada or "").strip(),
         "calificacion_llamada": (getattr(l, "calificacion_llamada", None) or "").strip(),

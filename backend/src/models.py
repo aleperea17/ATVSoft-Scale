@@ -244,6 +244,8 @@ class Lead(db.Entity):
     programada_ofrecido_llamada = Optional(str, default="")
     # Ventas
     pago = Optional(float, default=0)
+    # Fecha de pared del cobro (zona empresa). Null = histórico o sin pago.
+    fecha_cobro = Optional(date)
     debe = Optional(float, default=0)
     estado = Optional(str, default="")
     calificacion_llamada = Optional(str, default="")

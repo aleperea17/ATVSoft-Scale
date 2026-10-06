@@ -19,6 +19,7 @@ import {
   patchLeadCloser,
   patchLeadOwed,
   patchLeadFechaSeguimientoPago,
+  patchLeadFechaCobro,
   patchLeadPayment,
   patchLeadNotes,
   patchLeadProgramOffered,
@@ -253,12 +254,31 @@ export function DailyPanelPage({
   const handlePaymentChange = useCallback(
     async (leadId: number, payment: number) => {
       try {
-        await patchLeadPayment(leadId, payment)
+        const next = await patchLeadPayment(leadId, payment)
         setCalls((prev) =>
-          prev.map((c) => (c.id === leadId ? { ...c, payment } : c)),
+          prev.map((c) =>
+            c.id === leadId
+              ? { ...c, payment: next.payment, fecha_cobro: next.fecha_cobro }
+              : c,
+          ),
         )
       } catch (e) {
         toast(e instanceof Error ? e.message : 'No se pudo guardar el pago.')
+        throw e
+      }
+    },
+    [toast],
+  )
+
+  const handleFechaCobroChange = useCallback(
+    async (leadId: number, fecha: string | null) => {
+      try {
+        await patchLeadFechaCobro(leadId, fecha)
+        setCalls((prev) =>
+          prev.map((c) => (c.id === leadId ? { ...c, fecha_cobro: fecha } : c)),
+        )
+      } catch (e) {
+        toast(e instanceof Error ? e.message : 'No se pudo guardar la fecha de cobro.')
         throw e
       }
     },
@@ -572,6 +592,7 @@ export function DailyPanelPage({
           onCalificacionChange={handleCalificacionChange}
           onFathomLinkChange={handleFathomLinkChange}
           onPaymentChange={handlePaymentChange}
+          onFechaCobroChange={handleFechaCobroChange}
           onOwedChange={handleOwedChange}
           onNextPaymentChange={handleNextPaymentChange}
           onNotesChange={handleNotesChange}

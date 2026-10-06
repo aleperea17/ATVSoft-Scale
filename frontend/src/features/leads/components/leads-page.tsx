@@ -313,9 +313,10 @@ export function LeadsPage() {
   // Mantener «Seg. pago» visible aunque el usuario oculte columnas en una sesión previa.
   useEffect(() => {
     setVisibleColumns((prev) => {
-      if (prev.has('fecha_seguimiento_pago')) return prev
+      if (prev.has('fecha_seguimiento_pago') && prev.has('fecha_cobro')) return prev
       const next = new Set(prev)
       next.add('fecha_seguimiento_pago')
+      next.add('fecha_cobro')
       return next
     })
   }, [])
@@ -1466,6 +1467,7 @@ function LeadsTable({
                   editing={editingCell?.id === lead.id && editingCell?.field === col.key}
                   onStartEdit={() => {
                     if (col.editable === false) return
+                    if (col.key === 'fecha_cobro' && !(Number(lead.payment) > 0)) return
                     setEditingCell({ id: lead.id, field: col.key })
                   }}
                   onCancelEdit={() => setEditingCell(null)}
@@ -1769,6 +1771,9 @@ function LeadsTableCell({
       )
     }
     if (col.type === 'date') {
+      if (col.key === 'fecha_cobro' && !(Number(lead.payment) > 0)) {
+        return <span className="text-[12px] text-[var(--text3)]">—</span>
+      }
       if (!value) return <span className="text-[12px] text-[var(--text3)]">—</span>
       const shown = formatIsoDateToDdMmYyyy(String(value)) ?? String(value)
       const followupAccent =
@@ -1819,6 +1824,9 @@ function LeadsTableCell({
 
   // ── Editing mode ──
   if (editing && col.editable) {
+    if (col.key === 'fecha_cobro' && !(Number(lead.payment) > 0)) {
+      return <span className="text-[12px] text-[var(--text3)]">—</span>
+    }
     if (col.type === 'select' || (col.type === 'badge' && col.options)) {
       const opts =
         col.key === 'origin'
@@ -2108,6 +2116,9 @@ function LeadsTableCell({
 
   // Date
   if (col.type === 'date') {
+    if (col.key === 'fecha_cobro' && !(Number(lead.payment) > 0)) {
+      return <span className={`${cellClass} text-[var(--text3)]`}>—</span>
+    }
     const followupAccent =
       col.key === 'fecha_seguimiento_pago' &&
       resolveLeadStatusFlags(lead.status, getLeadStatusCatalog()).requires_followup_date

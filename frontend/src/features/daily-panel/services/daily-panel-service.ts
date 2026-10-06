@@ -13,6 +13,7 @@ type ApiDailyCallRow = {
   status: string
   payment?: number
   owed?: number
+  fecha_cobro?: string | null
   program_offered?: string
   programada_ofrecido_llamada?: string
   calificacion_llamada?: string
@@ -114,6 +115,7 @@ export async function getDailyCalls(
       programada_ofrecido_llamada: (row.programada_ofrecido_llamada || '').trim(),
       payment: Number(row.payment) || 0,
       owed: Number(row.owed) || 0,
+      fecha_cobro: row.fecha_cobro ? String(row.fecha_cobro).slice(0, 10) : null,
       notes: String(row.notes ?? '').trim(),
       fecha_seguimiento_pago: row.fecha_seguimiento_pago
         ? String(row.fecha_seguimiento_pago).slice(0, 10)
@@ -282,7 +284,10 @@ export async function getProgramOptions(): Promise<string[]> {
   return ['', ...names]
 }
 
-export async function patchLeadPayment(leadId: number, payment: number): Promise<void> {
+export async function patchLeadPayment(
+  leadId: number,
+  payment: number,
+): Promise<{ payment: number; fecha_cobro: string | null }> {
   const amount = Number.isFinite(payment) ? Math.max(0, payment) : 0
   const res = await apiFetch(`/leads/${encodeURIComponent(String(leadId))}`, {
     method: 'PATCH',
@@ -295,6 +300,27 @@ export async function patchLeadPayment(leadId: number, payment: number): Promise
       typeof raw === 'object' && raw && 'detail' in raw
         ? String((raw as { detail: unknown }).detail)
         : 'No se pudo guardar el pago.'
+    throw new Error(detail)
+  }
+  const row = raw as { payment?: number; fecha_cobro?: string | null }
+  return {
+    payment: Number(row.payment) || amount,
+    fecha_cobro: row.fecha_cobro ? String(row.fecha_cobro).slice(0, 10) : null,
+  }
+}
+
+export async function patchLeadFechaCobro(leadId: number, fecha: string | null): Promise<void> {
+  const res = await apiFetch(`/leads/${encodeURIComponent(String(leadId))}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fecha_cobro: fecha }),
+  })
+  const raw = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const detail =
+      typeof raw === 'object' && raw && 'detail' in raw
+        ? String((raw as { detail: unknown }).detail)
+        : 'No se pudo guardar la fecha de cobro.'
     throw new Error(detail)
   }
 }

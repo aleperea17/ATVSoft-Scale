@@ -9,6 +9,7 @@ export type DailyCall = {
   program_offered: string
   programada_ofrecido_llamada: string
   payment: number
+  fecha_cobro: string | null
   owed: number
   notes: string
   fecha_seguimiento_pago: string | null

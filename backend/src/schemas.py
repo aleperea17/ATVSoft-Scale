@@ -584,6 +584,10 @@ class LeadOut(BaseModel):
     )
     revenue: float = 0
     payment: float = 0
+    fecha_cobro: str | None = Field(
+        default=None,
+        description="YYYY-MM-DD fecha de cobro (columna fecha_cobro). Null si no hay pago.",
+    )
     owed: float = 0
     closer: str | None = None
     setter: str | None = None
@@ -676,6 +680,10 @@ class LeadPatchRequest(BaseModel):
     revenue: float | None = None
     ingresos_mensuales: float | None = None
     payment: float | None = None
+    fecha_cobro: str | None = Field(
+        default=None,
+        description="YYYY-MM-DD o vacío/null para limpiar (solo si pago > 0). Si pago pasa a 0 se limpia igual.",
+    )
     owed: float | None = None
     notes: str | None = None
     dolores_setting: str | None = None
@@ -1043,6 +1051,7 @@ class AgentLlamadaHoyItemOut(BaseModel):
     status: str
     payment: float = 0
     owed: float = 0
+    fecha_cobro: str | None = None
     program_offered: str = ""
     programada_ofrecido_llamada: str = ""
     calificacion_llamada: str = ""

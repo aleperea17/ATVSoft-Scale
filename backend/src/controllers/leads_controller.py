@@ -27,6 +27,7 @@ from src.services.programs_services import (
     program_price_usd_for_prog_raw,
 )
 from src.services.lead_agenda_utils import lead_counts_as_agenda, lead_is_cuota_plazo
+from src.services.lead_pago_service import UNSET, apply_lead_pago, lead_cobro_wall_date, lead_has_pago
 from src.services.lead_statuses_services import default_lead_status_name
 from src.services.call_report_service import (
     analyze_call_report,
@@ -306,6 +307,11 @@ def _to_lead_out(
         program_price_usd=price_catalog,
         revenue=ing,
         payment=float(row.pago or 0),
+        fecha_cobro=(
+            row.fecha_cobro.isoformat()
+            if isinstance(getattr(row, "fecha_cobro", None), date)
+            else None
+        ),
         owed=float(row.debe or 0),
         closer=(row.closer or "").strip() or None,
         setter=(row.setter or "").strip() or None,
@@ -360,6 +366,10 @@ def list_leads(
         default=False,
         description="Si true, incluye leads sin agendo (p. ej. conteos por origen en dashboard marketing).",
     ),
+    base: str | None = Query(
+        default=None,
+        description="llamada (default): contrato actual. pago: cobros del rango por fecha_cobro (sin exigir agendo).",
+    ),
 ) -> LeadsListResponse:
     try:
         uid = int(user_id)
@@ -373,6 +383,11 @@ def list_leads(
         if month_key is None:
             raise HTTPException(status_code=400, detail="Parámetro month inválido (usar YYYY-MM).")
 
+    base_norm = (base or "llamada").strip().casefold()
+    if base_norm not in ("llamada", "pago"):
+        raise HTTPException(status_code=400, detail="Parámetro base inválido (usar llamada o pago).")
+    by_pago = base_norm == "pago"
+
     with db_session:
         norm_prices = build_program_norm_price_map(uid)
         rows = [
@@ -380,22 +395,40 @@ def list_leads(
             for r in list(LeadEntity.select())
             if int(r.user_id) == uid
         ]
-        if not include_all:
+        if by_pago:
+            rows = [r for r in rows if lead_has_pago(r)]
+        elif not include_all:
             rows = [r for r in rows if r.agendo is not None]
         if date_range is not None:
             start_d, end_d = date_range
-            rows = [
-                r
-                for r in rows
-                if in_inclusive_range(_lead_effective_wall_date(r), start_d, end_d)
-            ]
+            if by_pago:
+                rows = [
+                    r
+                    for r in rows
+                    if in_inclusive_range(lead_cobro_wall_date(r), start_d, end_d)
+                ]
+            else:
+                rows = [
+                    r
+                    for r in rows
+                    if in_inclusive_range(_lead_effective_wall_date(r), start_d, end_d)
+                ]
         elif month_key is not None:
             year_m, month_m = month_key
-            rows = [
-                r
-                for r in rows
-                if (mb := _lead_month_ar(r)) is not None and mb == (year_m, month_m)
-            ]
+            if by_pago:
+                rows = [
+                    r
+                    for r in rows
+                    if (d := lead_cobro_wall_date(r)) is not None
+                    and d.year == year_m
+                    and d.month == month_m
+                ]
+            else:
+                rows = [
+                    r
+                    for r in rows
+                    if (mb := _lead_month_ar(r)) is not None and mb == (year_m, month_m)
+                ]
 
         rows.sort(key=_lead_sort_ts, reverse=False)
         default_st = default_lead_status_name(uid)
@@ -747,8 +780,21 @@ def patch_lead(
             row.ingresos_lead = float(data["ingresos_mensuales"] or 0)
         elif "revenue" in data:
             row.ingresos_lead = float(data["revenue"] or 0)
-        if "payment" in data:
-            row.pago = float(data["payment"] or 0)
+        if "payment" in data or "fecha_cobro" in data:
+            pago_arg: object = UNSET
+            fc_arg: object = UNSET
+            if "payment" in data:
+                pago_arg = float(data["payment"] or 0)
+            if "fecha_cobro" in data:
+                raw_fc = data["fecha_cobro"]
+                if raw_fc is None or (isinstance(raw_fc, str) and not str(raw_fc).strip()):
+                    fc_arg = None
+                else:
+                    parsed_fc = _parse_date_only(raw_fc)
+                    if parsed_fc is None:
+                        raise HTTPException(status_code=400, detail="fecha_cobro inválida (YYYY-MM-DD).")
+                    fc_arg = parsed_fc
+            apply_lead_pago(row, pago=pago_arg, fecha_cobro=fc_arg)
         if "owed" in data:
             row.debe = float(data["owed"] or 0)
         if "notes" in data:

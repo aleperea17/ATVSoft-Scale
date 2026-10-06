@@ -155,7 +155,7 @@ export function TeamPage() {
   const cashCollected = ventasKpis?.ingresos ?? cashCollectedFallback
   const facturacion = ventasKpis?.facturacion ?? facturacionFallback
 
-  if (!ready || loading) return <div className="py-12 text-center text-[var(--text3)]">Cargando...</div>
+  if (!ready) return <div className="py-12 text-center text-[var(--text3)]">Cargando...</div>
 
   if (!userId) {
     return <div className="py-12 text-center text-[var(--text3)]">Iniciá sesión para ver el equipo.</div>
@@ -172,6 +172,11 @@ export function TeamPage() {
           onThisMonth={applyThisMonth}
         />
       </div>
+
+      {loading ? (
+        <div className="py-12 text-center text-[var(--text3)]">Cargando...</div>
+      ) : (
+        <>
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="glass-card glass-card--performant border-l-2 border-l-[var(--green)] p-5">
@@ -312,7 +317,8 @@ export function TeamPage() {
           )}
         </div>
       </div>
-
+        </>
+      )}
     </div>
   )
 }

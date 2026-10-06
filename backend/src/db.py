@@ -1515,6 +1515,47 @@ def _migrate_postgres_lead_fecha_seguimiento_pago() -> None:
         conn.close()
 
 
+def _migrate_postgres_lead_fecha_cobro() -> None:
+    """Columna fecha_cobro en Lead (nullable, sin backfill)."""
+    if (config("DB_PROVIDER", default="") or "").strip().lower() != "postgres":
+        return
+    try:
+        import psycopg2
+    except ImportError:
+        return
+    try:
+        conn = psycopg2.connect(
+            user=config("DB_USER"),
+            password=config("DB_PASS"),
+            host=config("DB_HOST"),
+            dbname=config("DB_NAME"),
+        )
+    except Exception:
+        return
+    try:
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT table_name FROM information_schema.tables
+                WHERE table_schema = 'public' AND lower(table_name) = 'lead'
+                """
+            )
+            tr = cur.fetchone()
+            if not tr:
+                return
+            physical = tr[0]
+            sql_table = f'"{physical}"' if physical != physical.lower() else physical
+            try:
+                cur.execute(
+                    f"ALTER TABLE {sql_table} ADD COLUMN IF NOT EXISTS fecha_cobro date"
+                )
+            except Exception:
+                pass
+    finally:
+        conn.close()
+
+
 def _migrate_postgres_lead_cuota_plazo() -> None:
     """es_cuota_plazo, lead_origen_id, nro_plazo en Lead."""
     if (config("DB_PROVIDER", default="") or "").strip().lower() != "postgres":
@@ -1740,6 +1781,7 @@ def init_db() -> None:
     _migrate_postgres_weekly_report_feedback_marketing()
     _migrate_postgres_lead_formulario()
     _migrate_postgres_lead_fecha_seguimiento_pago()
+    _migrate_postgres_lead_fecha_cobro()
     _migrate_postgres_lead_cuota_plazo()
     _migrate_postgres_lead_calendly_account_key()
     _migrate_postgres_drop_company_config()

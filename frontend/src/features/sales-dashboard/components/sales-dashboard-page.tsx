@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { useMonthContext } from '@/shared/components/app-providers'
 import { DateRangeFilter } from '@/shared/components/date-range-filter'
+import type { IngresosBase } from '@/shared/lib/lead-cobro'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
 import { formatCash, formatCashAxisShort, formatIsoDateDdMmYyyy } from '@/shared/lib/format-utils'
 import { resolveMediaUrl } from '@/shared/lib/backend-public-url'
@@ -38,14 +39,20 @@ export function SalesDashboardPage() {
   const { desde, hasta, setDateRange, applyThisMonth } = useMonthContext()
   const { ready, userId } = useAuthUser()
   const [tab, setTab] = useState<'mensual' | 'semanal' | 'diario'>('mensual')
+  const [ingresosBase, setIngresosBase] = useState<IngresosBase>('llamada')
   const [curr, setCurr] = useState<VDData | null>(null)
   const [prev, setPrev] = useState<VDData | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const buildVD = useCallback(async (period: AnalyticsPeriod): Promise<VDData> => {
-    const { analytics } = await getLeadsAnalytics(period)
+  const buildVD = useCallback(async (p: AnalyticsPeriod, base: IngresosBase): Promise<VDData> => {
+    const { analytics } = await getLeadsAnalytics(p, { ingresosBase: base })
+    const ingresosWeek =
+      analytics.ingresosBase === 'pago' ? analytics.byWeek.ingresosPago : analytics.byWeek.ingresos
+    const ingresosDay =
+      analytics.ingresosBase === 'pago' ? analytics.byDay.ingresosPago : analytics.byDay.ingresos
     return {
       ...analytics,
+      byDay: { ...analytics.byDay, ingresos: ingresosDay },
       chats: analytics.chats,
       chatsStories: analytics.chatsStories,
       chatsReels: analytics.chatsReels,
@@ -53,7 +60,9 @@ export function SalesDashboardPage() {
       conversacionesByWeek: analytics.byWeek.conversaciones,
       showsByWeek: analytics.byWeek.shows,
       cierresByWeek: analytics.byWeek.cierres,
-      ingresosByWeek: analytics.byWeek.ingresos,
+      ingresosByWeek: ingresosWeek,
+      ingresosCohorteByWeek: analytics.byWeek.ingresos,
+      ingresosCohorteByDay: analytics.byDay.ingresos,
       noShowsByWeek: analytics.byWeek.noShows,
     }
   }, [])
@@ -71,13 +80,16 @@ export function SalesDashboardPage() {
     }
     setLoading(true)
     try {
-      const [c, p] = await Promise.all([buildVD(period), buildVD(prevPeriod)])
+      const [c, p] = await Promise.all([
+        buildVD(period, ingresosBase),
+        buildVD(prevPeriod, ingresosBase),
+      ])
       setCurr(c)
       setPrev(p)
     } finally {
       setLoading(false)
     }
-  }, [period, prevPeriod, ready, userId, buildVD])
+  }, [period, prevPeriod, ready, userId, buildVD, ingresosBase])
 
   useEffect(() => {
     void fetchData()
@@ -95,41 +107,69 @@ export function SalesDashboardPage() {
     }
   }, [fetchData])
 
-  if (!ready || loading) return <div className="py-12 text-center text-[var(--text3)]">Cargando...</div>
+  if (!ready) return <div className="py-12 text-center text-[var(--text3)]">Cargando...</div>
 
   if (!userId) {
     return <div className="py-12 text-center text-[var(--text3)]">Iniciá sesión para ver el panel de ventas.</div>
   }
 
-  if (!curr || !prev) return <div className="py-12 text-center text-[var(--text3)]">Cargando...</div>
-
-  const delta = (key: keyof VDData) => pct(prev[key] as number, curr[key] as number)
+  const bodyLoading = loading || !curr || !prev
+  const delta = (key: keyof VDData) =>
+    curr && prev ? pct(prev[key] as number, curr[key] as number) : 0
 
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <h2 className="text-lg font-semibold tracking-tight">Dashboard <span className="text-[var(--text2)]">de Ventas</span></h2>
-        <DateRangeFilter
-          desde={desde}
-          hasta={hasta}
-          onChange={setDateRange}
-          onThisMonth={applyThisMonth}
-        />
+        <div className="flex flex-col items-stretch gap-3 sm:items-end">
+          <DateRangeFilter
+            desde={desde}
+            hasta={hasta}
+            onChange={setDateRange}
+            onThisMonth={applyThisMonth}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text3)]">
+              Contar ventas por
+            </span>
+            <div className="segment-group w-fit">
+              <button
+                type="button"
+                onClick={() => setIngresosBase('llamada')}
+                className={`segment-tab ${ingresosBase === 'llamada' ? 'segment-tab-active font-semibold' : ''}`}
+              >
+                Fecha de llamada
+              </button>
+              <button
+                type="button"
+                onClick={() => setIngresosBase('pago')}
+                className={`segment-tab ${ingresosBase === 'pago' ? 'segment-tab-active font-semibold' : ''}`}
+              >
+                Fecha de pago
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Tabs */}
-      <div className="segment-group mb-6 w-fit">
-        {(['mensual', 'semanal', 'diario'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`segment-tab capitalize ${tab === t ? 'segment-tab-active font-semibold' : ''}`}>
-            {t}
-          </button>
-        ))}
-      </div>
+      {bodyLoading ? (
+        <div className="py-12 text-center text-[var(--text3)]">Cargando...</div>
+      ) : (
+        <>
+          <div className="segment-group mb-6 w-fit">
+            {(['mensual', 'semanal', 'diario'] as const).map(t => (
+              <button key={t} onClick={() => setTab(t)}
+                className={`segment-tab capitalize ${tab === t ? 'segment-tab-active font-semibold' : ''}`}>
+                {t}
+              </button>
+            ))}
+          </div>
 
-      {tab === 'mensual' && <MensualView curr={curr} prev={prev} delta={delta} period={period} />}
-      {tab === 'semanal' && <SemanalView curr={curr} />}
-      {tab === 'diario' && <DiarioView curr={curr} />}
+          {tab === 'mensual' && curr && prev && <MensualView curr={curr} prev={prev} delta={delta} period={period} />}
+          {tab === 'semanal' && curr && <SemanalView curr={curr} />}
+          {tab === 'diario' && curr && <DiarioView curr={curr} />}
+        </>
+      )}
     </div>
   )
 }
@@ -159,15 +199,21 @@ function getMetricExplanation(id: MonthlyMetricId, d: VDData): MetricExplanation
   switch (id) {
     case 'cash':
       return {
-        title: 'Cash del mes',
+        title: d.ingresosBase === 'pago' ? 'Ingresos cobrados (por fecha de pago)' : 'Cash del mes',
         result: formatCash(d.ingresos),
-        formula: 'Cash collected = Pagó en leads + seguimiento del mes.',
+        formula:
+          d.ingresosBase === 'pago'
+            ? 'Suma de Pagó en leads cuyo cobro cae en el rango (fecha_cobro, o fecha de llamada si falta) + seguimiento del período.'
+            : 'Cash collected = Pagó en leads + seguimiento del mes (fecha de llamada).',
         data: [
           { label: 'Pago (columna Pagó en leads)', value: formatCash(d.cashCollectedComposition.pago) },
           { label: 'Seguimiento (formularios)', value: formatCash(d.cashCollectedComposition.seguimiento) },
           { label: 'Total cash del mes', value: formatCash(d.ingresos) },
         ],
-        source: 'Fuente: leads del mes (/leads) + reportes de seguimiento (/team/seguimiento-reports/month).',
+        source:
+          d.ingresosBase === 'pago'
+            ? 'Fuente: GET /leads?base=pago + seguimiento. Agendas, shows, tasas y AOV siguen por fecha de llamada.'
+            : 'Fuente: leads del mes (/leads) + reportes de seguimiento (/team/seguimiento-reports/month).',
       }
     case 'conversaciones':
       return {
@@ -1158,7 +1204,9 @@ function MensualView({ curr, prev, delta, period }: { curr: VDData; prev: VDData
             <div className="font-mono-num mt-1 text-3xl font-bold leading-none">{formatCash(curr.facturacion)}</div>
           </div>
           <div>
-            <div className="text-[11px] text-[var(--text3)]">Cash Collected</div>
+            <div className="text-[11px] text-[var(--text3)]">
+              {curr.ingresosBase === 'pago' ? 'Ingresos cobrados (por fecha de pago)' : 'Cash Collected'}
+            </div>
             <div className="mt-1 flex items-stretch gap-2 sm:gap-3">
               <div className="font-mono-num shrink-0 text-3xl font-bold leading-none text-[var(--green)] tabular-nums">
                 {formatCash(curr.ingresos)}
@@ -1186,6 +1234,15 @@ function MensualView({ curr, prev, delta, period }: { curr: VDData; prev: VDData
           </div>
         </div>
       </div>
+      {curr.ingresosBase === 'pago' ? (
+        <p className="text-[12px] text-[var(--text3)]">
+          Agendas, shows, cierres, conversaciones, tasas, embudo, Facturación, ticket promedio y ratios (AOV, cash/agenda, cash/show)
+          siguen por fecha de llamada. Solo este cash y los gráficos de ingreso cambian de base.
+          {curr.pagosSinFechaCobro > 0
+            ? ` ${curr.pagosSinFechaCobro} pago${curr.pagosSinFechaCobro === 1 ? '' : 's'} sin fecha de cobro se cuentan por fecha de llamada.`
+            : ''}
+        </p>
+      ) : null}
 
       {/* Funnel */}
       <VDFunnel d={curr} period={period} />
@@ -1193,7 +1250,12 @@ function MensualView({ curr, prev, delta, period }: { curr: VDData; prev: VDData
       {/* KPIs del mes */}
       <div className="text-[11px] font-medium uppercase tracking-widest text-[var(--text3)]">Metricas del Mes</div>
       <div className="grid grid-cols-4 gap-3">
-        <VDKpi label="Cash del mes" value={formatCash(curr.ingresos)} change={delta('ingresos')} onClick={() => setOpenMetric('cash')} />
+        <VDKpi
+          label={curr.ingresosBase === 'pago' ? 'Ingresos cobrados' : 'Cash del mes'}
+          value={formatCash(curr.ingresos)}
+          change={delta('ingresos')}
+          onClick={() => setOpenMetric('cash')}
+        />
         <VDKpi label="Conversaciones" value={fN(curr.conversaciones)} change={delta('conversaciones')} onClick={() => setOpenMetric('conversaciones')} />
         <VDKpi label="Agendas" value={fN(curr.agendas)} change={delta('agendas')} onClick={() => setOpenMetric('agendas')} />
         <VDKpi label="No Shows" value={fN(curr.noShows)} change={delta('noShows')} hib={false} onClick={() => setOpenMetric('noShows')} />
@@ -1262,7 +1324,7 @@ function MensualView({ curr, prev, delta, period }: { curr: VDData; prev: VDData
           <tbody>
             {(
               [
-                { label: 'Cash del mes', metricId: 'cash' as const, pv: formatCash(prev.ingresos), cv: formatCash(curr.ingresos), chg: delta('ingresos') },
+                { label: curr.ingresosBase === 'pago' ? 'Ingresos cobrados' : 'Cash del mes', metricId: 'cash' as const, pv: formatCash(prev.ingresos), cv: formatCash(curr.ingresos), chg: delta('ingresos') },
                 { label: 'Conversaciones', metricId: 'conversaciones' as const, pv: fN(prev.conversaciones), cv: fN(curr.conversaciones), chg: delta('conversaciones') },
                 { label: 'Agendas', metricId: 'agendas' as const, pv: fN(prev.agendas), cv: fN(curr.agendas), chg: delta('agendas') },
                 { label: 'No Shows', metricId: 'noShows' as const, pv: fN(prev.noShows), cv: fN(curr.noShows), chg: delta('noShows') },
@@ -1311,7 +1373,7 @@ function SemanalView({ curr }: { curr: VDData }) {
   })
   const tasaAgend = curr.conversacionesByWeek.map((c, i) => c > 0 ? (curr.agendasByWeek[i] / c) * 100 : 0)
   const aovW = curr.cierresByWeek.map((c, i) =>
-    c > 0 ? (curr.ingresosByWeek[i] ?? 0) / c : 0,
+    c > 0 ? (curr.ingresosCohorteByWeek[i] ?? 0) / c : 0,
   )
 
   const rows = [
@@ -1356,7 +1418,7 @@ function SemanalView({ curr }: { curr: VDData }) {
           <Bar data={{ labels: weeks, datasets: [{ data: curr.agendasByWeek, backgroundColor: 'rgba(245,158,11,0.25)', hoverBackgroundColor: '#F59E0B', borderRadius: 8, borderSkipped: false, barPercentage: 0.5, categoryPercentage: 0.7 }] }}
             options={{ responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.6)', font: { size: 11 } } }, y: { grid: { color: 'rgba(255,255,255,0.03)', drawTicks: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.4)', font: { size: 10 }, padding: 8, maxTicksLimit: 4 } } }, plugins: { tooltip: { backgroundColor: 'rgba(0,0,0,0.85)', padding: 10, cornerRadius: 8, displayColors: false } } }} />
         </ChartCard>
-        <ChartCard title="Ingresos por semana" value={formatCash(curr.ingresosByWeek.reduce((s, v) => s + v, 0))} subtitle="Pagó en vivo (leads del mes)">
+        <ChartCard title={curr.ingresosBase === 'pago' ? 'Ingresos cobrados por semana' : 'Ingresos por semana'} value={formatCash(curr.ingresosByWeek.reduce((s, v) => s + v, 0))} subtitle={curr.ingresosBase === 'pago' ? 'Pagó por fecha de cobro' : 'Pagó en vivo (leads del mes)'}>
           <Bar data={{ labels: weeks, datasets: [{ data: curr.ingresosByWeek, backgroundColor: 'rgba(34,197,94,0.25)', hoverBackgroundColor: '#22C55E', borderRadius: 8, borderSkipped: false, barPercentage: 0.5, categoryPercentage: 0.7 }] }}
             options={{ responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.6)', font: { size: 11 } } }, y: { grid: { color: 'rgba(255,255,255,0.03)', drawTicks: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.4)', font: { size: 10 }, padding: 8, maxTicksLimit: 4, callback: (v: string | number) => formatCashAxisShort(v) } } }, plugins: { tooltip: { backgroundColor: 'rgba(0,0,0,0.85)', padding: 10, cornerRadius: 8, displayColors: false, callbacks: { label: (ctx: { parsed: { y: number | null } }) => formatCash(ctx.parsed.y ?? 0) } } } }} />
         </ChartCard>
@@ -1393,7 +1455,7 @@ function DiarioView({ curr }: { curr: VDData }) {
     return c > 0 ? Number.NaN : 0
   })
   const tasaAgD = conv.map((c, i) => c > 0 ? (agendas[i] / c) * 100 : 0)
-  const aovD = cierres.map((c, i) => (c > 0 ? ingresos[i] / c : 0))
+  const aovD = cierres.map((c, i) => (c > 0 ? (curr.ingresosCohorteByDay[i] ?? 0) / c : 0))
 
   const sum = (arr: number[]) => arr.reduce((s, v) => s + v, 0)
   const sumAg = sum(agendas)
@@ -1408,7 +1470,7 @@ function DiarioView({ curr }: { curr: VDData }) {
     { label: 'Shows', data: shows, total: sumSh },
     { label: 'No Shows', data: noShowsD, total: sum(noShowsD) },
     { label: 'Cierres', data: cierres, total: sumCi },
-    { label: 'Ingresos (Pagó)', data: ingresos, total: sumIng, fmt: formatCash },
+    { label: curr.ingresosBase === 'pago' ? 'Ingresos cobrados' : 'Ingresos (Pagó)', data: ingresos, total: sumIng, fmt: formatCash },
     { label: 'T. Agendamiento', data: tasaAgD, total: sumConv > 0 ? (sumAg / sumConv) * 100 : 0, fmt: fP },
     {
       label: 'Show Up Rate',
@@ -1422,7 +1484,7 @@ function DiarioView({ curr }: { curr: VDData }) {
       total: sumSh > 0 ? (sumCi / sumSh) * 100 : sumCi > 0 ? Number.NaN : 0,
       fmt: fPOrDash,
     },
-    { label: 'AOV', data: aovD, total: sumCi > 0 ? sumIng / sumCi : 0, fmt: formatCash },
+    { label: 'AOV', data: aovD, total: sumCi > 0 ? sum(curr.ingresosCohorteByDay) / sumCi : 0, fmt: formatCash },
   ]
 
   return (
@@ -1455,7 +1517,7 @@ function DiarioView({ curr }: { curr: VDData }) {
           <Bar data={{ labels: days, datasets: [{ data: agendas, backgroundColor: 'rgba(245,158,11,0.25)', hoverBackgroundColor: '#F59E0B', borderRadius: 6, borderSkipped: false, barPercentage: 0.6, categoryPercentage: 0.8 }] }}
             options={{ responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.6)', font: { size: 11 }, maxRotation: 60, minRotation: 0 } }, y: { grid: { color: 'rgba(255,255,255,0.03)', drawTicks: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.4)', font: { size: 10 }, padding: 8, maxTicksLimit: 4 } } }, plugins: { tooltip: { backgroundColor: 'rgba(0,0,0,0.85)', padding: 10, cornerRadius: 8, displayColors: false } } }} />
         </ChartCard>
-        <ChartCard title="Ingresos diarios" value={formatCash(ingresos.reduce((s, v) => s + v, 0))} subtitle="Pagó en vivo (leads del rango)">
+        <ChartCard title={curr.ingresosBase === 'pago' ? 'Ingresos cobrados diarios' : 'Ingresos diarios'} value={formatCash(ingresos.reduce((s, v) => s + v, 0))} subtitle={curr.ingresosBase === 'pago' ? 'Pagó por fecha de cobro' : 'Pagó en vivo (leads del rango)'}>
           <Bar data={{ labels: days, datasets: [{ data: ingresos, backgroundColor: 'rgba(34,197,94,0.25)', hoverBackgroundColor: '#22C55E', borderRadius: 6, borderSkipped: false, barPercentage: 0.6, categoryPercentage: 0.8 }] }}
             options={{ responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.6)', font: { size: 11 }, maxRotation: 60, minRotation: 0 } }, y: { grid: { color: 'rgba(255,255,255,0.03)', drawTicks: false }, border: { display: false }, ticks: { color: 'rgba(161,161,170,0.4)', font: { size: 10 }, padding: 8, maxTicksLimit: 4, callback: (v: string | number) => formatCashAxisShort(v) } } }, plugins: { tooltip: { backgroundColor: 'rgba(0,0,0,0.85)', padding: 10, cornerRadius: 8, displayColors: false, callbacks: { label: (ctx: { parsed: { y: number | null } }) => formatCash(ctx.parsed.y ?? 0) } } } }} />
         </ChartCard>

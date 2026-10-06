@@ -99,6 +99,9 @@ export async function getAdminDailyCalls(
       programada_ofrecido_llamada: (row.programada_ofrecido_llamada || '').trim(),
       payment: Number(row.payment) || 0,
       owed: Number(row.owed) || 0,
+      fecha_cobro: (row as { fecha_cobro?: string | null }).fecha_cobro
+        ? String((row as { fecha_cobro?: string }).fecha_cobro).slice(0, 10)
+        : null,
       notes: String((row as { notes?: string }).notes ?? '').trim(),
       fecha_seguimiento_pago: (row as { fecha_seguimiento_pago?: string | null }).fecha_seguimiento_pago
         ? String((row as { fecha_seguimiento_pago?: string }).fecha_seguimiento_pago).slice(0, 10)

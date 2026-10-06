@@ -22,6 +22,7 @@ type Props = {
   ) => Promise<void>
   onFathomLinkChange: (leadId: number, callLink: string | null) => Promise<void>
   onPaymentChange: (leadId: number, payment: number) => Promise<void>
+  onFechaCobroChange: (leadId: number, fecha: string | null) => Promise<void>
   onOwedChange: (leadId: number, owed: number) => Promise<void>
   onNextPaymentChange: (leadId: number, fecha: string | null) => Promise<void>
   onNotesChange: (leadId: number, notes: string) => Promise<void>
@@ -361,13 +362,44 @@ function NextPaymentCell({
 function PaymentCell({
   leadId,
   value,
+  fechaCobro,
   onSave,
+  onFechaCobroSave,
 }: {
   leadId: number
   value: number
+  fechaCobro: string | null
   onSave: (leadId: number, payment: number) => Promise<void>
+  onFechaCobroSave: (leadId: number, fecha: string | null) => Promise<void>
 }) {
-  return <CurrencyCell leadId={leadId} value={value} variant="payment" onSave={onSave} />
+  const [savingDate, setSavingDate] = useState(false)
+  const current = (fechaCobro || '').slice(0, 10)
+  const commitDate = async (raw: string) => {
+    const next = raw.trim() ? raw.trim().slice(0, 10) : null
+    if (next === (current || null)) return
+    setSavingDate(true)
+    try {
+      await onFechaCobroSave(leadId, next)
+    } finally {
+      setSavingDate(false)
+    }
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      <CurrencyCell leadId={leadId} value={value} variant="payment" onSave={onSave} />
+      {value > 0 ? (
+        <input
+          type="date"
+          value={current}
+          disabled={savingDate}
+          onChange={(e) => void commitDate(e.target.value)}
+          className="neo-calls__date-input"
+          title="Fecha de cobro"
+          aria-label={`Fecha de cobro de lead ${leadId}`}
+        />
+      ) : null}
+    </div>
+  )
 }
 
 function NotesCell({
@@ -561,6 +593,7 @@ export function DailyCallsTable({
   onCalificacionChange,
   onFathomLinkChange,
   onPaymentChange,
+  onFechaCobroChange,
   onOwedChange,
   onNextPaymentChange,
   onNotesChange,
@@ -646,7 +679,13 @@ export function DailyCallsTable({
             label="Programa ofrecido"
             onChange={onProgramadaOfrecidoChange}
           />
-          <PaymentCell leadId={row.id} value={row.payment} onSave={onPaymentChange} />
+          <PaymentCell
+            leadId={row.id}
+            value={row.payment}
+            fechaCobro={row.fecha_cobro}
+            onSave={onPaymentChange}
+            onFechaCobroSave={onFechaCobroChange}
+          />
           <CurrencyCell leadId={row.id} value={row.owed} variant="owed" onSave={onOwedChange} />
           <NextPaymentCell
             leadId={row.id}
