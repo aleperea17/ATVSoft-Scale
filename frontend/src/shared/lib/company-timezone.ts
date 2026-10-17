@@ -20,6 +20,21 @@ export function calendarPartsInTimeZone(
   return { year: n('year'), month: n('month'), day: n('day') }
 }
 
+/** `YYYY-MM-DDTHH:MM` de ahora en hora de pared de Madrid (comparable con fechas naive guardadas en Madrid). */
+export function nowWallIsoInCompanyTz(timeZone: string = COMPANY_TIMEZONE): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date())
+  const v = (t: string) => parts.find((p) => p.type === t)?.value ?? '00'
+  return `${v('year')}-${v('month')}-${v('day')}T${v('hour')}:${v('minute')}`
+}
+
 /** YYYY-MM-DD en el calendario de Madrid (no UTC ni el del navegador). */
 export function todayIsoInCompanyTz(timeZone: string = COMPANY_TIMEZONE): string {
   const p = calendarPartsInTimeZone(new Date(), timeZone)

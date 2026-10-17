@@ -151,7 +151,7 @@ export default function PostsFijadosPage() {
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-[var(--text)]">Post fijados</h2>
           <p className="mt-1 max-w-xl text-[12px] text-[var(--text3)]">
-            Trackeá carruseles/posts de feed (p. ej. los fijados del perfil). Cada uno tiene su propio token{' '}
+            Trackeá carruseles, imágenes o videos (p. ej. los fijados del perfil). Cada uno tiene su propio token{' '}
             <span className="font-mono-num text-[var(--text2)]">post:&lt;id&gt;</span> para atribuir leads.
           </p>
         </div>

@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 import traceback
 
 from src.schemas import (
@@ -14,20 +14,10 @@ from src.schemas import (
 from src.services.company_config_service import company_month_key
 from src.services.date_range_filter import parse_optional_date_range
 from src.services.stories_service import StoriesService
+from src.controllers.auth_controller import require_user_id as get_current_user
 
 router = APIRouter(prefix="/api/stories", tags=["stories"], redirect_slashes=False)
 service = StoriesService()
-
-
-def get_current_user(
-    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
-) -> str:
-    if x_user_id is None or not x_user_id.strip():
-        raise HTTPException(
-            status_code=401,
-            detail="Se requiere el header X-User-Id con el id del usuario autenticado.",
-        )
-    return x_user_id.strip()
 
 
 @router.get("/sequences", response_model=list[StorySequenceOut])

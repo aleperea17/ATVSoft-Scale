@@ -36,7 +36,7 @@ type ReelMetricItem = {
   /** 1–12 en calendario de la instancia (publicación) */
   month: number | null
   day: number | null
-  /** Semana dentro del mes (1 = días 1–7, …) según fecha de la instancia */
+  /** Semana lunes→domingo dentro del mes (1 = la que contiene el día 1) según fecha de la instancia */
   weekOfMonth: number | null
   chats: number
   cash: number
@@ -220,6 +220,13 @@ function weekDayRangeLabel(y: number, m: number, week: number): string {
   return `${start}–${end}`
 }
 
+
+/** Semana lunes→domingo dentro del mes: 1 = la que contiene el día 1 (igual que Dashboard ventas). */
+function mondayWeekOfMonth(y: number, m: number, d: number): number {
+  const firstWeekday = (new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 6) % 7
+  return Math.floor((d - 1 + firstWeekday) / 7) + 1
+}
+
 export function ReelsMetricsPanel() {
   const { ready, userId } = useAuthUser()
   const { timezone } = useCompanyTimezone()
@@ -258,8 +265,7 @@ export function ReelsMetricsPanel() {
           const shares = Number(r.metrics?.shares || 0)
           const cl = r.classification
           const parts = r.published_at ? calendarInCompanyTz(new Date(r.published_at), timezone) : null
-          const weekOfMonth =
-            parts && parts.d > 0 ? Math.floor((parts.d - 1) / 7) + 1 : null
+          const weekOfMonth = parts && parts.d > 0 ? mondayWeekOfMonth(parts.y, parts.m, parts.d) : null
           return {
             id: r.id,
             title: (r.title || 'Reel sin titulo').slice(0, 48),
@@ -311,7 +317,7 @@ export function ReelsMetricsPanel() {
     const y = Number(selectedYear)
     const m = Number(selectedMonth)
     if (!Number.isFinite(y) || !Number.isFinite(m)) return 0
-    return Math.ceil(daysInMonth(y, m) / 7)
+    return mondayWeekOfMonth(y, m, daysInMonth(y, m))
   }, [weekFilterEnabled, selectedYear, selectedMonth])
 
   useEffect(() => {
@@ -479,7 +485,7 @@ export function ReelsMetricsPanel() {
               !dateFiltersEnabled
                 ? dateFilterHint
                 : weekFilterEnabled
-                  ? 'Semana dentro del mes (días 1–7, 8–14, …)'
+                  ? 'Semana dentro del mes (lunes a domingo)'
                   : 'Elegí año y mes para filtrar por semana del mes'
             }
             className={filterSelectClass}

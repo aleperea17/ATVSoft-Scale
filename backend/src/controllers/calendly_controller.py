@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Annotated, Any
 
 import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pony.orm import ObjectNotFound, db_session
 from pydantic import BaseModel, Field
@@ -30,6 +30,7 @@ from src.services.calendly_webhook_service import persist_calendly_user_uri_if_m
 from src.services.company_config_service import to_company_naive
 from src.services.lead_agenda_utils import lead_is_cuota_plazo
 from src.services.lead_statuses_services import booking_lead_status_name
+from src.controllers.auth_controller import require_user_id
 
 router = APIRouter(prefix="/calendly", tags=["calendly"], redirect_slashes=False)
 
@@ -53,17 +54,6 @@ class CalendlySyncRequest(BaseModel):
 
 class CalendlyRateLimitError(Exception):
     pass
-
-
-def require_user_id(
-    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
-) -> str:
-    if x_user_id is None or not x_user_id.strip():
-        raise HTTPException(
-            status_code=401,
-            detail="Se requiere el header X-User-Id con el id del usuario autenticado.",
-        )
-    return x_user_id.strip()
 
 
 def _uid_int(user_id: str) -> int:

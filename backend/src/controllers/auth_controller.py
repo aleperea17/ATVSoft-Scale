@@ -1,4 +1,6 @@
+import hmac
 from datetime import datetime, timedelta, timezone
+from typing import Annotated
 
 import bcrypt
 from decouple import config
@@ -20,10 +22,18 @@ from src.schemas import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-JWT_SECRET = config("JWT_SECRET", default="change-this-secret")
+_INSECURE_JWT_SECRETS = {"", "change-this-secret"}
+_INSECURE_REGISTER_KEYS = {"", "change-this-register-key"}
+
+JWT_SECRET = (config("JWT_SECRET", default="") or "").strip()
+if JWT_SECRET in _INSECURE_JWT_SECRETS:
+    raise RuntimeError(
+        "JWT_SECRET no está configurado (o usa el valor por defecto inseguro). "
+        "Definilo en el .env antes de levantar el backend."
+    )
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_MINUTES = config("JWT_EXPIRE_MINUTES", cast=int, default=60 * 24)
-REGISTER_ADMIN_KEY = config("REGISTER_ADMIN_KEY", default="change-this-register-key")
+REGISTER_ADMIN_KEY = (config("REGISTER_ADMIN_KEY", default="") or "").strip()
 
 
 def _create_access_token(username: str) -> str:
@@ -35,7 +45,16 @@ def _create_access_token(username: str) -> str:
 @router.post("/register", response_model=AuthTokenResponse)
 def register_user(
     body: AuthRegisterRequest,
+    x_register_admin_key: Annotated[str | None, Header(alias="X-Register-Admin-Key")] = None,
 ):
+    # Registro cerrado: solo con REGISTER_ADMIN_KEY configurada y enviada en el header.
+    if REGISTER_ADMIN_KEY in _INSECURE_REGISTER_KEYS:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Registro deshabilitado")
+    if not x_register_admin_key or not hmac.compare_digest(
+        x_register_admin_key.strip().encode("utf-8"), REGISTER_ADMIN_KEY.encode("utf-8")
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Registro no autorizado")
+
     username = body.username.strip()
     password = body.password
     if not username or not password:
@@ -48,6 +67,7 @@ def register_user(
 
         password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
         user = AuthUser(username=username, password_hash=password_hash, updated_at=datetime.utcnow())
+        user.flush()
         uid = user.id
 
     return AuthTokenResponse(access_token=_create_access_token(username), user_id=uid)
@@ -91,6 +111,22 @@ def get_current_user_id(username: str = Depends(get_current_username)) -> int:
         if user is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
         return user.id
+
+
+def require_user_id(
+    token_user_id: Annotated[int, Depends(get_current_user_id)],
+    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
+) -> str:
+    """Id del usuario autenticado, tomado del JWT (Authorization: Bearer).
+
+    X-User-Id es opcional; si viene y no coincide con el token, se rechaza.
+    """
+    if x_user_id is not None and x_user_id.strip() and x_user_id.strip() != str(token_user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="X-User-Id no coincide con el usuario autenticado.",
+        )
+    return str(token_user_id)
 
 
 @router.get("/me", response_model=AuthMeResponse)

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from src.schemas import SyncSettingsOut, SyncSettingsPatch
 from src.services.stories_service import StoriesService
@@ -22,19 +22,9 @@ from src.services.sync_settings_service import (
     get_sync_settings_dict,
     update_sync_settings,
 )
+from src.controllers.auth_controller import require_user_id
 
 router = APIRouter(prefix="/api/settings/sync", tags=["settings"], redirect_slashes=False)
-
-
-def require_user_id(
-    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
-) -> str:
-    if x_user_id is None or not x_user_id.strip():
-        raise HTTPException(
-            status_code=401,
-            detail="Se requiere el header X-User-Id con el id del usuario autenticado.",
-        )
-    return x_user_id.strip()
 
 
 def _iso_dt(value: datetime | None) -> str | None:

@@ -7,29 +7,19 @@ from datetime import datetime, timezone
 from typing import Annotated, Any
 
 import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pony.orm import ObjectNotFound, db_session
 
 from src.db import db
 from src.schemas import YoutubeVideoPatchRequest
 from src.models import ApiConnection, Lead, YoutubeContent
 from src.services.company_config_service import datetime_month_tuple
+from src.controllers.auth_controller import require_user_id
 
 router = APIRouter(prefix="/api/youtube", tags=["youtube"], redirect_slashes=False)
 _SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
 _VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
 _DURATION_RE = re.compile(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?")
-
-
-def require_user_id(
-    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
-) -> str:
-    if x_user_id is None or not x_user_id.strip():
-        raise HTTPException(
-            status_code=401,
-            detail="Se requiere el header X-User-Id con el id del usuario autenticado.",
-        )
-    return x_user_id.strip()
 
 
 def _uid_int(user_id: str) -> int:
@@ -265,6 +255,11 @@ def sync_youtube(user_id: Annotated[str, Depends(require_user_id)]) -> dict[str,
         try:
             conn = ApiConnection.get(user_id=uid, platform="youtube")
         except ObjectNotFound:
+            raise HTTPException(
+                status_code=400,
+                detail='No hay conexión YouTube. Configurá la plataforma "youtube" en Conexiones API.',
+            )
+        if conn is None:
             raise HTTPException(
                 status_code=400,
                 detail='No hay conexión YouTube. Configurá la plataforma "youtube" en Conexiones API.',
@@ -559,6 +554,8 @@ def patch_youtube_video(
         try:
             row = YoutubeContent.get(id=video_id, user_id=uid)
         except ObjectNotFound:
+            raise HTTPException(status_code=404, detail="Video no encontrado.")
+        if row is None:
             raise HTTPException(status_code=404, detail="Video no encontrado.")
         if "cash_manual" in payload and payload["cash_manual"] is not None:
             row.cash = float(max(0.0, float(payload["cash_manual"])))

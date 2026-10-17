@@ -1,5 +1,6 @@
 import { apiFetch } from '@/lib/api'
 import {
+  normStatusKey,
   resolveLeadStatusFlags,
   type LeadStatusCatalogItem,
 } from '@/shared/lib/lead-status-flags'
@@ -12,6 +13,7 @@ import {
   monthRangeIso,
   periodQueryString,
 } from '@/shared/lib/date-range'
+import { nowWallIsoInCompanyTz } from '@/shared/lib/company-timezone'
 import {
   type IngresosBase,
   leadCallWallDateIso,
@@ -123,16 +125,41 @@ export function leadIsCuotaPlazo(l: LeadRow): boolean {
   return v === true || v === 1 || v === 'true' || v === '1'
 }
 
+/** Fuera del embudo de ventas: llamada cancelada o renovación de una clienta existente. */
+const STATUS_FUERA_DE_EMBUDO = new Set(['cancelada', 'renovacion'])
+
+/** Llamada agendada que todavía no se hizo (o se movió): no es show. */
+const STATUS_SIN_LLAMADA_HECHA = new Set([
+  're agendada',
+  'reserva',
+  'pendiente de llamar',
+  'seguimiento para reagendar',
+])
+
 export function leadHasAgenda(l: LeadRow): boolean {
   if (leadIsCuotaPlazo(l)) return false
+  if (STATUS_FUERA_DE_EMBUDO.has(normStatusKey(String(l.status ?? '')))) return false
   const ag = l.agendo
   const hasAgendo = ag != null && String(ag).trim() !== ''
   return !!(l.scheduled_at || l.call_at || l.call || hasAgendo)
 }
 
+/** Tiene fecha de llamada y ya pasó (solo `agendo` sin llamada no alcanza para ser show). */
+function leadCallAlreadyHappened(l: LeadRow): boolean {
+  const raw = l.call || l.call_at || l.scheduled_at
+  if (!raw) return false
+  // `call` es hora de pared de Madrid sin zona: comparar como texto, no con el reloj del navegador.
+  const wall = String(raw).trim().replace(' ', 'T').slice(0, 16)
+  if (!/^\d{4}-\d{2}-\d{2}/.test(wall)) return false
+  return wall <= nowWallIsoInCompanyTz()
+}
+
+/** Show = llamada agendada que ya pasó y se hizo (no no-show, ni reprogramada/pendiente). */
 export function leadHasShow(l: LeadRow): boolean {
+  if (!leadHasAgenda(l) || !leadCallAlreadyHappened(l)) return false
+  if (STATUS_SIN_LLAMADA_HECHA.has(normStatusKey(String(l.status ?? '')))) return false
   const flags = resolveLeadStatusFlags(String(l.status ?? ''), _statusCatalog)
-  return leadHasAgenda(l) && !flags.counts_as_no_show
+  return !flags.counts_as_no_show
 }
 
 export function leadIsCierre(l: LeadRow): boolean {

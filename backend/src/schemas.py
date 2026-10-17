@@ -965,8 +965,10 @@ class AgentResumenProgramaOut(BaseModel):
 
 
 class AgentResumenPorSemanaOut(BaseModel):
-    agendas: list[int] = Field(default_factory=lambda: [0, 0, 0, 0])
-    cierres: list[int] = Field(default_factory=lambda: [0, 0, 0, 0])
+    """Una posición por semana lunes→domingo del mes (4 a 6 semanas)."""
+
+    agendas: list[int] = Field(default_factory=list)
+    cierres: list[int] = Field(default_factory=list)
 
 
 class AgentResumenOut(BaseModel):

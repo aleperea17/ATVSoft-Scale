@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pony.orm import ObjectNotFound, db_session
 
 from src.models import HotLead as HotLeadEntity
@@ -12,19 +12,9 @@ from src.schemas import (
     HotLeadsListResponse,
 )
 from src.services.company_config_service import company_now, datetime_month_tuple
+from src.controllers.auth_controller import require_user_id
 
 router = APIRouter(prefix="/api/hot-leads", tags=["hot-leads"], redirect_slashes=False)
-
-
-def require_user_id(
-    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
-) -> str:
-    if x_user_id is None or not x_user_id.strip():
-        raise HTTPException(
-            status_code=401,
-            detail="Se requiere el header X-User-Id con el id del usuario autenticado.",
-        )
-    return x_user_id.strip()
 
 
 def _parse_month_query(month: str | None) -> tuple[int, int] | None:

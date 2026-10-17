@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import Response
 from pony.orm import ObjectNotFound, db_session
 from pydantic import BaseModel
@@ -34,19 +34,9 @@ from src.services.call_report_service import (
     normalize_fathom_url,
     notify_call_report_discord,
 )
+from src.controllers.auth_controller import require_user_id
 
 router = APIRouter(prefix="/api/call-reports", tags=["call-reports"], redirect_slashes=False)
-
-
-def require_user_id(
-    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
-) -> str:
-    if x_user_id is None or not x_user_id.strip():
-        raise HTTPException(
-            status_code=401,
-            detail="Se requiere el header X-User-Id con el id del usuario autenticado.",
-        )
-    return x_user_id.strip()
 
 
 def _dt_iso(dt: datetime | None) -> str | None:

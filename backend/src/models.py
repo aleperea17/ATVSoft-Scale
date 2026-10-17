@@ -17,7 +17,7 @@ class ApiConnection(db.Entity):
     platform = Required(str)
     # Distingue múltiples cuentas de la misma plataforma (ej. calendly clienta/closer).
     # Otras plataformas usan "" (una sola fila).
-    account_key = Required(str, default="")
+    account_key = Optional(str, default="")
     credentials = Required(Json, default=lambda: {})
     last_sync_at = Optional(datetime)
     updated_at = Optional(datetime)
@@ -85,14 +85,14 @@ class ReelContent(db.Entity):
 
 
 class FeedPostContent(db.Entity):
-    """Posts de feed Instagram (IMAGE / CAROUSEL_ALBUM), p. ej. posts fijados trackeados a mano."""
+    """Posts de feed Instagram (IMAGE / CAROUSEL_ALBUM / VIDEO), p. ej. posts fijados trackeados a mano."""
 
     _table_ = "feed_post_content"
 
     id = PrimaryKey(int, auto=True)
     user_id = Required(int, index=True)
     instagram_id = Required(str, unique=True)
-    media_type = Optional(str, default="")  # IMAGE | CAROUSEL_ALBUM
+    media_type = Optional(str, default="")  # IMAGE | CAROUSEL_ALBUM | VIDEO
     title = Optional(str)
     thumbnail_url = Optional(str)
     permalink = Optional(str)

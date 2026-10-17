@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pony.orm import ObjectNotFound, db_session
 
 from src.models import ApiConnection, Lead as LeadEntity
@@ -11,6 +11,7 @@ from src.schemas import BioLeadResponse, BioLeadStatusPatchRequest, BioLeadsList
 from src.services.company_config_service import company_today
 from src.services.lead_agenda_utils import lead_counts_as_agenda
 from src.services.lead_statuses_services import status_counts_as_cierre
+from src.controllers.auth_controller import require_user_id
 
 router = APIRouter(prefix="/api/bio", tags=["bio"], redirect_slashes=False)
 
@@ -18,17 +19,6 @@ VIA_OPTIONS_FIXED = ["Perfil", "Automático - ManyChat", "Referido", "Otro"]
 
 # Fallback si el usuario no configuró credentials["bio_keyword"] en ManyChat.
 BIO_PROFILE_KEYWORD_DEFAULT = "info"
-
-
-def require_user_id(
-    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
-) -> str:
-    if x_user_id is None or not x_user_id.strip():
-        raise HTTPException(
-            status_code=401,
-            detail="Se requiere el header X-User-Id con el id del usuario autenticado.",
-        )
-    return x_user_id.strip()
 
 
 def _parse_month(month: str | None) -> tuple[int, int] | None:
@@ -104,6 +94,8 @@ def _bio_profile_keyword_for_user(uid: int) -> str:
         try:
             conn = ApiConnection.get(user_id=uid, platform="manychat")
         except ObjectNotFound:
+            return BIO_PROFILE_KEYWORD_DEFAULT
+        if conn is None:
             return BIO_PROFILE_KEYWORD_DEFAULT
         creds = conn.credentials if isinstance(conn.credentials, dict) else {}
         raw = str(creds.get("bio_keyword") or "").strip()

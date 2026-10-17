@@ -327,7 +327,7 @@ export default function YouTubePage() {
     try {
       const res = await fetch(`${apiBase}/api/youtube/videos/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...backendAuthHeaders() },
+        headers: backendAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           cash_manual: Math.max(0, Number.isFinite(cashManual) ? cashManual : 0),
         }),

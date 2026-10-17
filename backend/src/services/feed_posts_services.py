@@ -1,4 +1,4 @@
-"""Posts de feed Instagram (IMAGE / CAROUSEL_ALBUM) — trackeo manual de posts fijados."""
+"""Posts de feed Instagram (IMAGE / CAROUSEL_ALBUM / VIDEO) — trackeo manual de posts fijados."""
 
 from __future__ import annotations
 
@@ -329,13 +329,12 @@ class FeedPostsServices:
 
         media_type = str(media.get("media_type") or "").strip().upper()
         product = str(media.get("media_product_type") or "").strip().upper()
-        if media_type not in {"IMAGE", "CAROUSEL_ALBUM"}:
-            if product == "REELS" or media_type in {"REELS", "VIDEO"}:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Este media es {media_type or product or 'desconocido'}; "
-                    "usá Reels para clips. Posts fijados aceptan IMAGE o CAROUSEL_ALBUM (feed).",
-                )
+        if media_type not in {"IMAGE", "CAROUSEL_ALBUM", "VIDEO"} and product != "REELS":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Este media es {media_type or product or 'desconocido'}; "
+                "posts fijados aceptan imagen, carrusel o video.",
+            )
 
         # Paso 0 embebido: si insights fallan del todo, no persistir
         self.validate_insights(user_id, media_id)

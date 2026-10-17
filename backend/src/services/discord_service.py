@@ -26,7 +26,8 @@ class DiscordServices:
             avatar_lines = str(avatar_raw).strip()
 
         embed = {
-            "title": f"REPORTE SETTER · {member_name.upper()} · {str(body.get('fecha'))}",
+            "title": f"REPORTE SETTER · {member_name.upper()} · {str(body.get('fecha'))}"
+            + (" · ACTUALIZADO (reemplaza al anterior)" if body.get("actualizado") else ""),
             "color": 0x2B2D31,
             "fields": [
                 {

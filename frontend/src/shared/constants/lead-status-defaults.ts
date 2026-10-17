@@ -59,6 +59,14 @@ export const DEFAULT_LEAD_STATUSES: LeadStatusDefault[] = [
     is_default: false,
   },
   {
+    nombre: 'Renovación',
+    color: '#2DD4BF',
+    counts_as_cierre: false,
+    counts_as_no_show: false,
+    requires_followup_date: true,
+    is_default: false,
+  },
+  {
     nombre: 'No show',
     color: '#F87171',
     counts_as_cierre: false,

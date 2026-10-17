@@ -256,7 +256,7 @@ function getMetricExplanation(id: MonthlyMetricId, d: VDData): MetricExplanation
           { label: 'Agendas (setter)', value: fN(d.agendas) },
         ],
         source:
-          'Fuente: GET /leads (fecha de llamada) + leadHasAgenda. Agendas del setter es otro conteo: lo que el equipo reportó el día que agendó.',
+          'Fuente: GET /leads (fecha de llamada) + leadHasAgenda, sin canceladas ni renovaciones. Agendas del setter es otro conteo: lo que el equipo reportó el día que agendó.',
       }
     case 'noShows':
       return {
@@ -284,7 +284,7 @@ function getMetricExplanation(id: MonthlyMetricId, d: VDData): MetricExplanation
           { label: 'Show up rate', value: fP(d.showUpRate) },
         ],
         source:
-          'Shows y Llamadas agendadas (CRM) son leads con llamada en el período (leadHasShow / leadHasAgenda). Agendas es lo que reporta el setter el día que agendó; no es el denominador de esta tasa.',
+          'Llamadas agendadas (CRM): leads con llamada en el período, sin canceladas ni renovaciones. Shows: de esas, las que ya pasaron y se hicieron (no cuentan No show, Reserva, Re-agendada, Pendiente de llamar ni Seguimiento para reagendar). Agendas es lo que reporta el setter el día que agendó; no es el denominador de esta tasa.',
       }
     case 'closeRate':
       return {

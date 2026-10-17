@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.schemas import (
     FeedPostAddRequest,
@@ -10,20 +10,10 @@ from src.schemas import (
     FeedPostsListResponse,
 )
 from src.services.feed_posts_services import FeedPostsServices
+from src.controllers.auth_controller import require_user_id
 
 router = APIRouter(prefix="/api/feed-posts", tags=["feed-posts"], redirect_slashes=False)
 service = FeedPostsServices()
-
-
-def require_user_id(
-    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
-) -> str:
-    if x_user_id is None or not x_user_id.strip():
-        raise HTTPException(
-            status_code=401,
-            detail="Se requiere el header X-User-Id con el id del usuario autenticado.",
-        )
-    return x_user_id.strip()
 
 
 @router.get("", response_model=FeedPostsListResponse)

@@ -2,9 +2,9 @@ import calendar
 import re
 from collections import defaultdict
 from datetime import date, datetime, timedelta
-from typing import Annotated, Any
+from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pony.orm import db_session
 from pydantic import BaseModel, Field
 from starlette.responses import Response
@@ -15,12 +15,12 @@ from src.services.closer_report_auto_service import (
     generate_daily_reports_for_user,
     preview_closer_report,
 )
-from src.services.company_config_service import company_today, datetime_month_tuple
+from src.services.company_config_service import company_today
+from src.services.lead_pago_service import lead_effective_month_tuple, lead_effective_wall_date
 from src.services.date_range_filter import (
     in_inclusive_range,
     parse_optional_date_range,
     require_month_or_range,
-    stored_wall_date,
 )
 from src.services.discord_service import DiscordServices
 from src.services.lead_agenda_utils import lead_is_cuota_plazo
@@ -30,6 +30,7 @@ from src.services.lead_statuses_services import (
     status_counts_as_no_show,
 )
 from src.team_reports_pdf import build_team_reports_pdf, fecha_iso_a_dd_mm_yyyy
+from src.controllers.auth_controller import require_user_id
 
 router = APIRouter(prefix="/api/team", tags=["team"], redirect_slashes=False)
 discord_service = DiscordServices()
@@ -37,17 +38,6 @@ discord_service = DiscordServices()
 DEFAULT_COMMISSION_PCT = 5.0
 VALID_ROLES = frozenset({"setter", "closer", "cash"})
 SEGUIMIENTO_MEMBER_ROLES = frozenset({"setter", "closer", "cash"})
-
-
-def require_user_id(
-    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
-) -> str:
-    if x_user_id is None or not x_user_id.strip():
-        raise HTTPException(
-            status_code=401,
-            detail="Se requiere el header X-User-Id con el id del usuario autenticado.",
-        )
-    return x_user_id.strip()
 
 
 def _notas_str(val: str | None) -> str:
@@ -402,6 +392,10 @@ class CloserStatsOut(BaseModel):
 class TeamDashboardOut(BaseModel):
     month: str
     cash_total: float
+    cash_sin_closer: float = Field(
+        0.0,
+        description="Cash de leads del período sin closer asignado o con closer inactivo (fuera de cash_total).",
+    )
     comisiones: float
     commission_pct: float
     total_conversaciones: int = Field(
@@ -635,6 +629,7 @@ def save_setter_report(body: SetterReportBody, user_id: str = Depends(require_us
             r.flush()
             result = ReportSavedOut(id=r.id, updated=False)
         discord_payload = _setter_report_discord_payload(r)
+        discord_payload["actualizado"] = result.updated
 
     try:
         if discord_payload is not None:
@@ -925,8 +920,12 @@ def _norm_member_name(raw: str | None) -> str:
 def _live_closer_stats_for_leads(
     uid: int,
     include_lead,
+    sin_closer: dict[str, float] | None = None,
 ) -> dict[str, dict[str, float | int]]:
-    """Cierres/shows/calls/calif/ingreso en vivo desde Lead, indexado por nombre de closer."""
+    """Cierres/shows/calls/calif/ingreso en vivo desde Lead, indexado por nombre de closer.
+
+    Si se pasa `sin_closer`, acumula en `sin_closer["ingreso"]` el cash de leads sin closer asignado.
+    """
     empty = {
         "llamadas_agendadas": 0,
         "shows": 0,
@@ -943,6 +942,8 @@ def _live_closer_stats_for_leads(
             continue
         key = _norm_member_name(lead.closer)
         if not key:
+            if sin_closer is not None:
+                sin_closer["ingreso"] = sin_closer.get("ingreso", 0.0) + float(lead.pago or 0)
             continue
         acc = by_name.setdefault(key, dict(empty))
         acc["ingreso"] = float(acc["ingreso"]) + float(lead.pago or 0)
@@ -966,20 +967,22 @@ def _live_closer_stats_for_leads(
     return by_name
 
 
-def _live_closer_month_stats(uid: int, year: int, month: int) -> dict[str, dict[str, float | int]]:
+def _live_closer_month_stats(
+    uid: int, year: int, month: int, sin_closer: dict[str, float] | None = None
+) -> dict[str, dict[str, float | int]]:
     def include(lead: Lead) -> bool:
-        mb = datetime_month_tuple(_lead_effective_dt_for_month(lead))
-        return mb == (year, month)
+        return lead_effective_month_tuple(lead) == (year, month)
 
-    return _live_closer_stats_for_leads(uid, include)
+    return _live_closer_stats_for_leads(uid, include, sin_closer)
 
 
-def _live_closer_range_stats(uid: int, start: date, end: date) -> dict[str, dict[str, float | int]]:
+def _live_closer_range_stats(
+    uid: int, start: date, end: date, sin_closer: dict[str, float] | None = None
+) -> dict[str, dict[str, float | int]]:
     def include(lead: Lead) -> bool:
-        d = stored_wall_date(_lead_effective_dt_for_month(lead))
-        return in_inclusive_range(d, start, end)
+        return in_inclusive_range(lead_effective_wall_date(lead), start, end)
 
-    return _live_closer_stats_for_leads(uid, include)
+    return _live_closer_stats_for_leads(uid, include, sin_closer)
 
 
 @router.get("/dashboard")
@@ -1007,10 +1010,11 @@ def team_dashboard(
             if r.user_id == uid and start <= r.fecha <= end
         ]
         total_conversaciones = sum(int(r.conversaciones) for r in setter_rows)
+        sin_closer: dict[str, float] = {"ingreso": 0.0}
         if live_mode == "range":
-            live_closers = _live_closer_range_stats(uid, start, end)
+            live_closers = _live_closer_range_stats(uid, start, end, sin_closer)
         else:
-            live_closers = _live_closer_month_stats(uid, start.year, start.month)
+            live_closers = _live_closer_month_stats(uid, start.year, start.month, sin_closer)
 
         members_by_id = {m.id: m for m in _members_for_user(uid)}
 
@@ -1064,6 +1068,13 @@ def team_dashboard(
                 )
             )
 
+        # Cash de leads sin closer o con un closer que ya no está activo: no entra en comisiones,
+        # pero sí en el Cash Collected del encabezado (lo mostramos aparte para que cuadre).
+        active_closer_keys = {_norm_member_name(m.nombre) for m in active_closers}
+        cash_sin_closer = float(sin_closer["ingreso"]) + sum(
+            float(t["ingreso"]) for k, t in live_closers.items() if k not in active_closer_keys
+        )
+
         avg_ticket = (cash_total / total_cierres_mes) if total_cierres_mes > 0 else 0.0
 
         setter_out: list[SetterStatsOut] = []
@@ -1094,6 +1105,7 @@ def team_dashboard(
     return TeamDashboardOut(
         month=ym,
         cash_total=cash_total,
+        cash_sin_closer=cash_sin_closer,
         comisiones=comisiones,
         commission_pct=DEFAULT_COMMISSION_PCT,
         total_conversaciones=total_conversaciones,

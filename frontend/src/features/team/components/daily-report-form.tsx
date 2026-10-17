@@ -428,6 +428,26 @@ export function DailyReportSection({ role }: Props) {
     setSaving(true)
     try {
       if (role === 'setter') {
+        // Un reporte por setter y fecha: si ya existe, guardar lo reemplaza (no suma).
+        const q = new URLSearchParams({ desde: form.date, hasta: form.date })
+        const prevRes = await apiFetch(`/team/reports?${q}`)
+        if (prevRes.ok) {
+          const prev = (await prevRes.json().catch(() => ({}))) as {
+            reports?: { kind?: string; member_id?: number; agendas?: number }[]
+          }
+          const dup = (prev.reports ?? []).find(
+            (r) => r.kind === 'setter' && Number(r.member_id) === Number(form.memberId),
+          )
+          if (
+            dup &&
+            !window.confirm(
+              `Ya hay un reporte de este setter con fecha ${form.date} (${dup.agendas ?? 0} agendas). ` +
+                'Si guardás, lo reemplaza en vez de sumarse. ¿Es correcta la fecha?',
+            )
+          ) {
+            return
+          }
+        }
         const res = await apiFetch('/team/setter-reports', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

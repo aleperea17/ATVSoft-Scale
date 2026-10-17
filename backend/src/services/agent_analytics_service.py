@@ -12,7 +12,8 @@ from typing import Any
 from pony.orm import db_session
 
 from src.models import CloserReport, Lead, OfferedProgram, SeguimientoReport, SetterReport, TeamMember
-from src.services.company_config_service import company_month_key, datetime_month_tuple
+from src.services.company_config_service import company_month_key
+from src.services.lead_pago_service import lead_effective_month_tuple
 from src.services.programs_services import build_program_norm_price_map, program_price_usd_for_prog_raw
 from src.services.reels_services import ReelsServices
 from src.services.stories_service import StoriesService
@@ -54,19 +55,21 @@ def month_range(month: str) -> tuple[date, date]:
     return start, end
 
 
-def _lead_effective_dt(row: Lead) -> datetime | None:
-    return row.fecha_bot or row.created_at
-
-
 def _lead_month_ar(row: Lead) -> tuple[int, int] | None:
-    return datetime_month_tuple(_lead_effective_dt(row))
+    """Mismo mes operativo que GET /leads (call > agendo > fecha_bot > created_at, hora de España)."""
+    return lead_effective_month_tuple(row)
 
 
-def _week_index(day_of_month: int) -> int:
-    return min(3, (day_of_month - 1) // 7)
+def _week_index(d: date) -> int:
+    """Semana lunes→domingo dentro del mes (0 = la que contiene el día 1), igual que Dashboard ventas."""
+    return (d.day - 1 + date(d.year, d.month, 1).weekday()) // 7
 
 
-def _program_prices_display(user_id: int) -> dict[str, float]:
+def _weeks_in_month(year: int, month: int) -> int:
+    return _week_index(date(year, month, calendar.monthrange(year, month)[1])) + 1
+
+
+def _norm_program_key(name: str) -> str:
     t = unicodedata.normalize("NFD", (name or "").strip())
     t = "".join(c for c in t if unicodedata.category(c) != "Mn")
     return " ".join(t.casefold().split())
@@ -178,23 +181,24 @@ def _seguimiento_month(user_id: int, start: date, end: date) -> tuple[float, lis
 def _build_weekly_buckets(
     setter_rows: list[_DailyReportRow],
     closer_rows: list[_DailyReportRow],
+    year: int,
+    month: int,
 ) -> dict[str, list[int]]:
-    agendas = [0, 0, 0, 0]
-    cierres = [0, 0, 0, 0]
+    n = _weeks_in_month(year, month)
+    agendas = [0] * n
+    cierres = [0] * n
     for r in setter_rows:
         try:
-            day = int(r.date.split("-")[2])
-        except (IndexError, ValueError):
+            d = date.fromisoformat(r.date[:10])
+        except ValueError:
             continue
-        w = _week_index(day)
-        agendas[w] += int(r.agendas)
+        agendas[min(_week_index(d), n - 1)] += int(r.agendas)
     for r in closer_rows:
         try:
-            day = int(r.date.split("-")[2])
-        except (IndexError, ValueError):
+            d = date.fromisoformat(r.date[:10])
+        except ValueError:
             continue
-        w = _week_index(day)
-        cierres[w] += int(r.cierres)
+        cierres[min(_week_index(d), n - 1)] += int(r.cierres)
     return {"agendas": agendas, "cierres": cierres}
 
 
@@ -265,7 +269,7 @@ def build_resumen(user_id: int, month: str) -> dict[str, Any]:
         for nombre, v in sorted(prog_map.items(), key=lambda x: float(x[1]["ingresos"]), reverse=True)
     ]
 
-    por_semana = _build_weekly_buckets(setter_rows, closer_rows)
+    por_semana = _build_weekly_buckets(setter_rows, closer_rows, start.year, start.month)
 
     return {
         "month": month.strip(),

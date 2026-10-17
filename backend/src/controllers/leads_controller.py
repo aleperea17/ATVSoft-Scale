@@ -2,7 +2,7 @@ import re
 from datetime import date, datetime, time, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pony.orm import ObjectNotFound, db_session
 
 from src.lead_display_utils import compute_dias_para_agendar, lead_display_nombre
@@ -20,14 +20,21 @@ from src.schemas import (
     ManualCallCreateRequest,
 )
 from src.services.agent_closer_service import list_llamadas_dia, list_llamadas_hoy
-from src.services.company_config_service import company_now, company_today, datetime_month_tuple
-from src.services.date_range_filter import in_inclusive_range, parse_optional_date_range, stored_wall_date
+from src.services.company_config_service import company_now, company_today
+from src.services.date_range_filter import in_inclusive_range, parse_optional_date_range
 from src.services.programs_services import (
     build_program_norm_price_map,
     program_price_usd_for_prog_raw,
 )
 from src.services.lead_agenda_utils import lead_counts_as_agenda, lead_is_cuota_plazo
-from src.services.lead_pago_service import UNSET, apply_lead_pago, lead_cobro_wall_date, lead_has_pago
+from src.services.lead_pago_service import (
+    UNSET,
+    apply_lead_pago,
+    lead_cobro_wall_date,
+    lead_effective_month_tuple,
+    lead_effective_wall_date,
+    lead_has_pago,
+)
 from src.services.lead_statuses_services import default_lead_status_name
 from src.services.call_report_service import (
     analyze_call_report,
@@ -35,6 +42,7 @@ from src.services.call_report_service import (
     is_fathom_link,
     normalize_fathom_url,
 )
+from src.controllers.auth_controller import require_user_id
 
 router = APIRouter(prefix="/api/leads", tags=["leads"], redirect_slashes=False)
 
@@ -92,7 +100,7 @@ def _normalize_channel_anchor_value(user_id_int: int, raw: str | None) -> str:
                 status_code=400,
                 detail="Secuencia de historia no encontrada.",
             ) from e
-        if int(seq.user_id) != user_id_int:
+        if seq is None or int(seq.user_id) != user_id_int:
             raise HTTPException(status_code=400, detail="Secuencia de historia no encontrada.")
         return f"{_STORY_AGENDA_PREFIX}{sid}"
     if low.startswith(_YOUTUBE_AGENDA_PREFIX):
@@ -108,7 +116,7 @@ def _normalize_channel_anchor_value(user_id_int: int, raw: str | None) -> str:
             yrow = YoutubeContent.get(id=yid)
         except ObjectNotFound as e:
             raise HTTPException(status_code=400, detail="Video de YouTube no encontrado.") from e
-        if int(yrow.user_id) != user_id_int:
+        if yrow is None or int(yrow.user_id) != user_id_int:
             raise HTTPException(status_code=400, detail="Video de YouTube no encontrado.")
         return f"{_YOUTUBE_AGENDA_PREFIX}{yid}"
     try:
@@ -118,7 +126,8 @@ def _normalize_channel_anchor_value(user_id_int: int, raw: str | None) -> str:
     if rid is not None:
         try:
             row = ReelContent.get(id=rid, user_id=user_id_int)
-            return str(row.id)
+            if row is not None:
+                return str(row.id)
         except ObjectNotFound:
             pass
         try:
@@ -155,13 +164,13 @@ def _lead_effective_dt(row: LeadEntity) -> datetime | None:
 
 
 def _lead_month_ar(row: LeadEntity) -> tuple[int, int] | None:
-    """(año, mes) en la zona de la empresa; mismo criterio de calendario que métricas de reels."""
-    return datetime_month_tuple(_lead_effective_dt(row))
+    """(año, mes) operativo en España; mismo día que el filtro por rango."""
+    return lead_effective_month_tuple(row)
 
 
 def _lead_effective_wall_date(row: LeadEntity) -> date | None:
-    """Día de calendario del datetime guardado (hora de pared), sin convertir UTC→Madrid."""
-    return stored_wall_date(_lead_effective_dt(row))
+    """Día operativo en España (hora de pared de Madrid; created_at UTC→Madrid)."""
+    return lead_effective_wall_date(row)
 
 
 def _lead_month_string_ar(row: LeadEntity) -> str | None:
@@ -180,17 +189,6 @@ def _lead_sort_ts(row: LeadEntity) -> float:
     if dt.tzinfo is not None:
         dt = dt.replace(tzinfo=None)
     return float(dt.replace(tzinfo=timezone.utc).timestamp())
-
-
-def require_user_id(
-    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
-) -> str:
-    if x_user_id is None or not x_user_id.strip():
-        raise HTTPException(
-            status_code=401,
-            detail="Se requiere el header X-User-Id con el id del usuario autenticado.",
-        )
-    return x_user_id.strip()
 
 
 def _dt_iso(dt: datetime | None) -> str | None:

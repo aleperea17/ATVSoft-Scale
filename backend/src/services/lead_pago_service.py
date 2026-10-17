@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from src.services.company_config_service import company_today
+from src.services.company_config_service import company_today, naive_utc_to_company
 from src.services.date_range_filter import stored_wall_date
 
 UNSET: object = object()
@@ -32,6 +32,28 @@ def lead_effective_dt(row: Any) -> datetime | None:
     )
 
 
+def lead_effective_wall_date(row: Any) -> date | None:
+    """Día operativo en España del lead (call > agendo > fecha_bot > created_at).
+
+    call/agendo/fecha_bot ya se guardan en hora de pared de Madrid: se usan tal cual.
+    created_at se guarda en UTC: se pasa a Madrid antes de tomar el día.
+    """
+    for attr in ("call", "agendo", "fecha_bot"):
+        v = getattr(row, attr, None)
+        if v:
+            return stored_wall_date(v)
+    created = getattr(row, "created_at", None)
+    if isinstance(created, datetime):
+        return naive_utc_to_company(created).date()
+    return stored_wall_date(created)
+
+
+def lead_effective_month_tuple(row: Any) -> tuple[int, int] | None:
+    """(año, mes) operativo en España; mismo día que `lead_effective_wall_date`."""
+    d = lead_effective_wall_date(row)
+    return (d.year, d.month) if d else None
+
+
 def lead_cobro_wall_date(row: Any) -> date | None:
     """Fecha de pared para modo pago: `fecha_cobro` o fallback de llamada, sin convertir zona."""
     fc = getattr(row, "fecha_cobro", None)
@@ -40,7 +62,7 @@ def lead_cobro_wall_date(row: Any) -> date | None:
         return wall.date()
     if isinstance(fc, date):
         return fc
-    return stored_wall_date(lead_effective_dt(row))
+    return lead_effective_wall_date(row)
 
 
 def lead_fecha_cobro_missing(row: Any) -> bool:

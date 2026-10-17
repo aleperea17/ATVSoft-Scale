@@ -120,7 +120,13 @@ export const PROGRAM_COLORS: Record<string, string> = {
 }
 
 export const PROGRAM_OPTIONS = ['', 'Boost', 'Advantage', 'Mentoria']
-export const ORIGIN_OPTIONS = ['Referido', 'Setter', 'Youtube', 'Lead viejo (seguimiento)'] as const
+export const ORIGIN_OPTIONS = [
+  'Referido',
+  'Setter',
+  'Agenda sin setter',
+  'Youtube',
+  'Lead viejo (seguimiento)',
+] as const
 
 export const AGENDO_EN_OPTIONS = ['Chat', 'Youtube'] as const
 
@@ -134,6 +140,8 @@ export const ORIGIN_COLORS: Record<string, string> = {
   Setter: '#3B82F6',
   Youtube: '#FF0000',
   'Lead viejo (seguimiento)': '#A855F7',
+  'Agenda sin setter': '#14B8A6',
+  Manual: '#94A3B8',
 }
 
 /** Tabs base; preferí `buildStatusTabs(catalog)` en runtime. */

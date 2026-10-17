@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Annotated, Any
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pony.orm import ObjectNotFound, db_session
 from pydantic import BaseModel, Field
@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from src.lead_display_utils import compute_dias_para_agendar
 from src.models import ApiConnection, Lead
 from src.services.lead_statuses_services import booking_lead_status_name
+from src.controllers.auth_controller import require_user_id
 
 router = APIRouter(prefix="/ghl", tags=["ghl"], redirect_slashes=False)
 
@@ -28,16 +29,6 @@ _REQUEST_DELAY_S = 0.2
 
 class GHLSyncRequest(BaseModel):
     month: str | None = Field(default=None, description="YYYY-MM opcional para filtrar appointments")
-
-def require_user_id(
-    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
-) -> str:
-    if x_user_id is None or not x_user_id.strip():
-        raise HTTPException(
-            status_code=401,
-            detail="Se requiere el header X-User-Id con el id del usuario autenticado.",
-        )
-    return x_user_id.strip()
 
 def _uid_int(user_id: str) -> int:
     try:
@@ -295,6 +286,8 @@ def sync_ghl(
         try:
             conn = ApiConnection.get(user_id=uid, platform="ghl")
         except ObjectNotFound:
+            raise HTTPException(status_code=400, detail="No hay conexión GHL.")
+        if conn is None:
             raise HTTPException(status_code=400, detail="No hay conexión GHL.")
         creds = conn.credentials if isinstance(conn.credentials, dict) else {}
         token = str(creds.get("access_token") or "").strip()

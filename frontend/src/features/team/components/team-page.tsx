@@ -37,6 +37,7 @@ type DashboardCloser = {
 type TeamDashboardResponse = {
   month: string
   cash_total: number
+  cash_sin_closer?: number
   comisiones: number
   commission_pct: number
   total_conversaciones: number
@@ -61,7 +62,11 @@ export function TeamPage() {
   const [closers, setClosers] = useState<ApiTeamMember[]>([])
   const [dashboard, setDashboard] = useState<TeamDashboardResponse | null>(null)
   /** Misma fuente que Dashboard de Ventas: reportes closer (`ingreso`) y seguimiento (`monto`). */
-  const [ventasKpis, setVentasKpis] = useState<{ facturacion: number; ingresos: number } | null>(null)
+  const [ventasKpis, setVentasKpis] = useState<{
+    facturacion: number
+    ingresos: number
+    seguimiento: number
+  } | null>(null)
   const [loading, setLoading] = useState(true)
 
   const fetchData = useCallback(async () => {
@@ -99,7 +104,11 @@ export function TeamPage() {
       }
       if (analyticsBundle) {
         const { analytics } = analyticsBundle
-        setVentasKpis({ facturacion: analytics.facturacion, ingresos: analytics.ingresos })
+        setVentasKpis({
+          facturacion: analytics.facturacion,
+          ingresos: analytics.ingresos,
+          seguimiento: analytics.cashCollectedComposition.seguimiento,
+        })
       } else {
         setVentasKpis(null)
       }
@@ -152,7 +161,13 @@ export function TeamPage() {
   const cashCollectedFallback = dashboard?.cash_total ?? 0
   const facturacionFallback =
     dashboard?.closers.reduce((acc, c) => acc + c.ingreso, 0) ?? 0
-  const cashCollected = ventasKpis?.ingresos ?? cashCollectedFallback
+  /** Desglose: el encabezado es exactamente Closers + Seguimiento + Sin closer asignado. */
+  const cashClosers = dashboard?.cash_total ?? 0
+  const cashSeguimiento = ventasKpis?.seguimiento ?? 0
+  const cashSinCloser = dashboard?.cash_sin_closer ?? 0
+  const cashCollected = dashboard
+    ? cashClosers + cashSeguimiento + cashSinCloser
+    : (ventasKpis?.ingresos ?? cashCollectedFallback)
   const facturacion = ventasKpis?.facturacion ?? facturacionFallback
 
   if (!ready) return <div className="py-12 text-center text-[var(--text3)]">Cargando...</div>
@@ -182,6 +197,24 @@ export function TeamPage() {
         <div className="glass-card glass-card--performant border-l-2 border-l-[var(--green)] p-5">
           <div className="text-[10px] uppercase tracking-wider text-[var(--text3)]">Cash Collected</div>
           <div className="font-mono-num mt-1 text-2xl font-bold text-[var(--green)]">{formatCash(cashCollected)}</div>
+          {dashboard ? (
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--text3)]">
+              <span>
+                Closers <span className="font-mono-num text-[var(--text2)]">{formatCash(cashClosers)}</span>
+              </span>
+              {cashSeguimiento > 0 ? (
+                <span>
+                  Seguimiento <span className="font-mono-num text-[var(--text2)]">{formatCash(cashSeguimiento)}</span>
+                </span>
+              ) : null}
+              {cashSinCloser > 0 ? (
+                <span>
+                  Sin closer asignado{' '}
+                  <span className="font-mono-num text-[var(--text2)]">{formatCash(cashSinCloser)}</span>
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <div className="glass-card glass-card--performant border-l-2 border-l-[var(--amber)] p-5">
           <div className="text-[10px] uppercase tracking-wider text-[var(--text3)]">Facturación</div>

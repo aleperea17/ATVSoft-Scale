@@ -6,7 +6,8 @@ import { MonthSelector } from '@/shared/components/month-selector'
 import { useAuthUser } from '@/shared/hooks/use-auth-user'
 import { formatCash } from '@/shared/lib/format-utils'
 import { calendarPartsInTimeZone } from '@/shared/lib/company-timezone'
-import { apiFetch } from '@/lib/api'
+import { leadCallWallDateIso } from '@/shared/lib/lead-cobro'
+import { apiFetch, backendAuthHeaders } from '@/lib/api'
 import { Line, Doughnut, Bar } from '@/shared/components/charts'
 import {
   calcFunnel,
@@ -307,15 +308,9 @@ async function fetchTeamDashboardDaily(
   }
 }
 
-/** Día usado para ubicar cash en vista diaria/semanal; debe coincidir con rawDailyCash/weeklyCash. */
+/** Día usado para ubicar cash en vista diaria/semanal; mismo día de llamada que el total del mes (GET /leads ?month=). */
 function leadCashDayForFilter(l: LeadRow): string {
-  for (const key of ['call_at'] as const) {
-    const v = l[key]
-    if (v == null || v === '') continue
-    const s = String(v).trim().slice(0, 10)
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-  }
-  return ''
+  return leadCallWallDateIso(l as Record<string, unknown>) ?? ''
 }
 
 /** Día de conversación del lead para atribuir chats en vista diaria/semanal. */
@@ -493,7 +488,7 @@ async function fetchBioMetricsLeads(
 ): Promise<number> {
   try {
     const res = await fetch(`${apiBase}/api/bio/metrics?month=${encodeURIComponent(monthKey)}`, {
-      headers: { 'X-User-Id': userId },
+      headers: backendAuthHeaders(),
     })
     if (!res.ok) return 0
     const payload = (await res.json().catch(() => ({}))) as { total_leads?: number }
@@ -687,7 +682,7 @@ export default function DashboardPage() {
 
     currLeads.filter(l => leadCashCollected(l) > 0).forEach(l => {
       const d = leadCashDayForFilter(l)
-      if (d) { const day = new Date(String(d)).getDate(); if (day >= 1 && day <= daysInMonth) dailyCash[day - 1] += leadCashCollected(l) }
+      if (d.slice(0, 7) === month) { const day = Number(d.slice(8, 10)); if (day >= 1 && day <= daysInMonth) dailyCash[day - 1] += leadCashCollected(l) }
     })
     if (paymentsCashTotal <= 0) {
       items.forEach((row: Record<string, unknown>) => {
@@ -699,7 +694,7 @@ export default function DashboardPage() {
 
     prevLeadsData.filter(l => leadCashCollected(l) > 0).forEach(l => {
       const d = leadCashDayForFilter(l)
-      if (d) { const day = new Date(String(d)).getDate(); if (day >= 1 && day <= daysInMonth) prevDailyCash[day - 1] += leadCashCollected(l) }
+      if (d.slice(0, 7) === prev) { const day = Number(d.slice(8, 10)); if (day >= 1 && day <= daysInMonth) prevDailyCash[day - 1] += leadCashCollected(l) }
     })
     if (prevLeadCash <= 0) {
       pItems.forEach((row: Record<string, unknown>) => {
@@ -781,7 +776,7 @@ export default function DashboardPage() {
     const loadBioMetrics = async () => {
       try {
         const res = await fetch(`${apiBase}/api/bio/metrics?month=${encodeURIComponent(month)}`, {
-          headers: { 'X-User-Id': userId },
+          headers: backendAuthHeaders(),
         })
         const txt = await res.text()
         const payload = (() => {
@@ -839,13 +834,25 @@ export default function DashboardPage() {
 
   const cashTrend = dashData.prevCashAtDay > 0 ? ((dashData.cash - dashData.prevCashAtDay) / dashData.prevCashAtDay * 100) : 0
 
-  // Weekly aggregation
-  const weeksCount = Math.ceil(daysInMonth / 7)
+  // Semanas lunes→domingo recortadas al mes (mismo criterio que Dashboard ventas y reportes semanales)
+  const weekGroups = (() => {
+    const groups: { startDay: number; endDay: number }[] = []
+    const firstWeekday = (new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 6) % 7 // 0 = lunes
+    let start = 1
+    let end = Math.min(7 - firstWeekday, daysInMonth)
+    while (start <= daysInMonth) {
+      groups.push({ startDay: start, endDay: end })
+      start = end + 1
+      end = Math.min(start + 6, daysInMonth)
+    }
+    return groups
+  })()
+  const weeksCount = weekGroups.length
   const weeklyLabels: string[] = []
   const weeklyCash: number[] = []
   const weeklyPrevCash: number[] = []
   for (let w = 0; w < weeksCount; w++) {
-    const s = w * 7; const e = Math.min(s + 7, daysInMonth)
+    const s = weekGroups[w].startDay - 1; const e = weekGroups[w].endDay
     weeklyLabels.push(`S${w + 1} (${s + 1}-${e})`)
     let wc = 0, wp = 0
     for (let d = s; d < e; d++) { wc += dashData.rawDailyCash[d] || 0; wp += dashData.rawPrevDailyCash[d] || 0 }
@@ -854,23 +861,15 @@ export default function DashboardPage() {
 
   const weeklyConversaciones: number[] = []
   for (let w = 0; w < weeksCount; w++) {
-    const s = w * 7
-    const e = Math.min(s + 7, daysInMonth)
+    const s = weekGroups[w].startDay - 1
+    const e = weekGroups[w].endDay
     let conv = 0
     for (let d = s; d < e; d++) conv += dashData.dailyChats[d] || 0
     weeklyConversaciones.push(conv)
   }
 
-  // Current week index (franjas 1–7, 8–14, … del mes seleccionado)
-  const currentWeekIdx = Math.min(Math.floor((dayNow - 1) / 7), weeksCount - 1)
-
-  const weekGroups = (() => {
-    const groups: { startDay: number; endDay: number }[] = []
-    for (let i = 1; i <= daysInMonth; i += 7) {
-      groups.push({ startDay: i, endDay: Math.min(i + 6, daysInMonth) })
-    }
-    return groups
-  })()
+  // Semana (lunes→domingo) que contiene el día de hoy en el mes seleccionado
+  const currentWeekIdx = Math.max(0, weekGroups.findIndex(g => dayNow >= g.startDay && dayNow <= g.endDay))
 
   const padYm = (n: number) => String(n).padStart(2, '0')
 
@@ -901,7 +900,7 @@ export default function DashboardPage() {
 
   /**
    * Sin semana elegida en el gráfico: la franja que contiene “hoy” en AR.
-   * Si esa franja no tiene ni conversaciones setter ni piezas en el mes, pasamos a la última franja con datos (típico: semana 1–7 con reels/reportes y semana 8–14 aún vacía).
+   * Si esa franja no tiene ni conversaciones setter ni piezas en el mes, pasamos a la última franja con datos (típico: semana anterior con reels/reportes y la actual aún vacía).
    */
   const semanalWeekIdxDefault =
     view === 'semanal'

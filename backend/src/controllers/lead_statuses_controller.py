@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from src.schemas import (
     LeadStatusTypeCreateRequest,
@@ -9,21 +9,11 @@ from src.schemas import (
     LeadStatusTypesListResponse,
 )
 from src.services.lead_statuses_services import LeadStatusesServices
+from src.controllers.auth_controller import require_user_id
 
 router = APIRouter(prefix="/api/lead-statuses", tags=["lead-statuses"], redirect_slashes=False)
 
 _service = LeadStatusesServices()
-
-
-def require_user_id(
-    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
-) -> str:
-    if x_user_id is None or not x_user_id.strip():
-        raise HTTPException(
-            status_code=401,
-            detail="Se requiere el header X-User-Id con el id del usuario autenticado.",
-        )
-    return x_user_id.strip()
 
 
 def _parse_uid(user_id: str) -> int:
