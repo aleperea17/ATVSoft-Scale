@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
 from src.schemas import (
     ReelKeywordPatchRequest,
@@ -13,6 +13,10 @@ from src.schemas import (
     ReelsSyncRangeImportRequest,
 )
 from src.services.reels_services import ReelsServices
+from src.services.instagram_thumbnails_service import (
+    renew_expired_thumbnails_auto,
+    renew_expired_thumbnails_blocking,
+)
 from src.controllers.auth_controller import require_user_id
 
 router = APIRouter(prefix="/api/reels", tags=["reels"], redirect_slashes=False)
@@ -22,6 +26,7 @@ service = ReelsServices()
 @router.get("", response_model=ReelsListResponse)
 def list_reels(
     user_id: Annotated[str, Depends(require_user_id)],
+    background_tasks: BackgroundTasks,
     month: str | None = Query(default=None, description="Formato YYYY-MM"),
     months: str | None = Query(default=None, description="Varios meses YYYY-MM separados por coma (p. ej. comparación)"),
     desde: date | None = Query(default=None, description="Inicio inclusive YYYY-MM-DD"),
@@ -33,6 +38,8 @@ def list_reels(
         description="Si true, no calcula total_cash/total_chats sobre todos los reels (más rápido; solo la página trae métricas finales).",
     ),
 ) -> ReelsListResponse:
+    # Miniaturas de Instagram vencidas: se renuevan en segundo plano (throttle por usuario).
+    background_tasks.add_task(renew_expired_thumbnails_auto, user_id)
     try:
         return service.list_reels(
             user_id, month, page, page_size, months_csv=months, skip_agg=skip_agg, desde=desde, hasta=hasta
@@ -157,9 +164,11 @@ async def reels_sync_range_import(
 @router.post("/refresh-metrics")
 async def refresh_reels_metrics(
     user_id: Annotated[str, Depends(require_user_id)],
+    background_tasks: BackgroundTasks,
 ) -> dict[str, str]:
     try:
         service.trigger_refresh_metrics(user_id)
+        background_tasks.add_task(renew_expired_thumbnails_blocking, user_id)
         return {"status": "started"}
     except HTTPException as e:
         raise e

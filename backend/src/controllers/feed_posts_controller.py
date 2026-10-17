@@ -1,6 +1,7 @@
+import asyncio
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
 from src.schemas import (
     FeedPostAddRequest,
@@ -10,6 +11,10 @@ from src.schemas import (
     FeedPostsListResponse,
 )
 from src.services.feed_posts_services import FeedPostsServices
+from src.services.instagram_thumbnails_service import (
+    renew_expired_thumbnails_auto,
+    renew_expired_thumbnails_blocking,
+)
 from src.controllers.auth_controller import require_user_id
 
 router = APIRouter(prefix="/api/feed-posts", tags=["feed-posts"], redirect_slashes=False)
@@ -17,7 +22,11 @@ service = FeedPostsServices()
 
 
 @router.get("", response_model=FeedPostsListResponse)
-def list_feed_posts(user_id: Annotated[str, Depends(require_user_id)]) -> FeedPostsListResponse:
+def list_feed_posts(
+    user_id: Annotated[str, Depends(require_user_id)],
+    background_tasks: BackgroundTasks,
+) -> FeedPostsListResponse:
+    background_tasks.add_task(renew_expired_thumbnails_auto, user_id)
     try:
         return service.list_posts(user_id)
     except HTTPException:
@@ -99,8 +108,11 @@ async def refresh_feed_post_metrics(
     user_id: Annotated[str, Depends(require_user_id)],
 ) -> dict:
     try:
-        return await service.refresh_metrics(user_id)
+        result = await service.refresh_metrics(user_id)
     except HTTPException:
         raise
     except Exception:
         raise HTTPException(status_code=500, detail="Error al refrescar métricas.")
+    # También renueva las miniaturas vencidas (la URL del CDN de Instagram caduca a los pocos días).
+    thumbs = await asyncio.to_thread(renew_expired_thumbnails_blocking, user_id)
+    return {**result, "thumbnails_renewed": thumbs["renewed"]}

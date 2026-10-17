@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pony.orm import db_session
 
 from src.lead_display_utils import lead_display_nombre
@@ -21,6 +21,8 @@ from src.schemas import (
     KeywordsTopReel,
 )
 from src.controllers.auth_controller import require_user_id
+
+from src.services.instagram_thumbnails_service import renew_expired_thumbnails_auto
 
 router = APIRouter(prefix="/api/keywords", tags=["keywords"], redirect_slashes=False)
 
@@ -152,7 +154,9 @@ def _lead_counts_by_reel(staged: list[tuple[float, int, str, KeywordClientRow]])
 @router.get("/reels-summary", response_model=KeywordsReelsSummaryResponse)
 def keywords_reels_summary(
     user_id: Annotated[str, Depends(require_user_id)],
+    background_tasks: BackgroundTasks,
 ) -> KeywordsReelsSummaryResponse:
+    background_tasks.add_task(renew_expired_thumbnails_auto, user_id)
     try:
         uid = int(user_id)
     except ValueError as e:
