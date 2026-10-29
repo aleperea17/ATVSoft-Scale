@@ -24,6 +24,12 @@ from src.services.admin_panel_service import (
 )
 from src.services.agent_closer_service import list_llamadas_dia
 from src.services.company_config_service import company_now
+from src.services.mensualidad_service import (
+    extender_mensualidad,
+    get_mensualidad_vence,
+    mensualidad_dias_restantes,
+    set_mensualidad_vence,
+)
 from src.services.lead_statuses_services import default_lead_status_name
 from src.services.programs_services import build_program_norm_price_map
 from src.controllers.auth_controller import require_user_id
@@ -58,6 +64,23 @@ class AdminManualCallBody(BaseModel):
     hora: str = Field(min_length=4, max_length=5)
     fecha: date
     ig_handle: str | None = None
+
+
+class AdminMensualidadBody(BaseModel):
+    vence: date | None = None
+
+
+class AdminMensualidadExtenderBody(BaseModel):
+    dias: int = Field(default=30, ge=1, le=366)
+
+
+class AdminMensualidadOut(BaseModel):
+    vence: date | None = None
+    dias_restantes: int | None = None
+
+
+def _mensualidad_out(vence: date | None) -> AdminMensualidadOut:
+    return AdminMensualidadOut(vence=vence, dias_restantes=mensualidad_dias_restantes(vence))
 
 
 @router.post("/unlock", response_model=AdminUnlockOut)
@@ -115,3 +138,24 @@ def admin_panel_manual_call(
         _sync_dias_para_agendar(row)
         norm_prices = build_program_norm_price_map(uid)
         return _to_lead_out(row, norm_prices)
+
+
+@router.get("/mensualidad", response_model=AdminMensualidadOut)
+def admin_panel_get_mensualidad(uid: int = Depends(require_admin_panel)) -> AdminMensualidadOut:
+    return _mensualidad_out(get_mensualidad_vence(uid))
+
+
+@router.put("/mensualidad", response_model=AdminMensualidadOut)
+def admin_panel_set_mensualidad(
+    body: AdminMensualidadBody,
+    uid: int = Depends(require_admin_panel),
+) -> AdminMensualidadOut:
+    return _mensualidad_out(set_mensualidad_vence(uid, body.vence))
+
+
+@router.post("/mensualidad/extender", response_model=AdminMensualidadOut)
+def admin_panel_extender_mensualidad(
+    body: AdminMensualidadExtenderBody,
+    uid: int = Depends(require_admin_panel),
+) -> AdminMensualidadOut:
+    return _mensualidad_out(extender_mensualidad(uid, body.dias))

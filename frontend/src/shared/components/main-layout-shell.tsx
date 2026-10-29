@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { Sidebar } from '@/shared/components/sidebar'
 import { Topbar } from '@/shared/components/topbar'
+import { MensualidadBanner } from '@/features/mensualidad/components/mensualidad-banner'
 
 type MainLayoutShellProps = {
   children: React.ReactNode
@@ -33,6 +34,7 @@ export function MainLayoutShell({ children }: MainLayoutShellProps) {
       ) : null}
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar onMenuClick={() => setMobileNavOpen(true)} />
+        <MensualidadBanner />
         <main
           className={`flex-1 overflow-x-hidden p-4 sm:p-6 lg:p-8 ${
             pathname === '/panel-diario' ? 'max-w-none' : 'max-w-[1580px]'

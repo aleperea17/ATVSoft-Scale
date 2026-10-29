@@ -26,6 +26,9 @@ class AuthTokenResponse(BaseModel):
 
 class AuthMeResponse(BaseModel):
     username: str
+    mensualidad_vence: date | None = None
+    # Días hasta el vencimiento (0 = vence hoy, negativo = vencida).
+    mensualidad_dias_restantes: int | None = None
 
 
 class AuthChangePasswordRequest(BaseModel):

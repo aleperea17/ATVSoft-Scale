@@ -7,6 +7,8 @@ class AuthUser(db.Entity):
     id = PrimaryKey(int, auto=True)
     username = Required(str, unique=True)
     password_hash = Required(str)
+    # Último día cubierto por la mensualidad (90 USD); None = sin aviso.
+    mensualidad_vence = Optional(date)
     created_at = Required(datetime, default=lambda: datetime.utcnow())
     updated_at = Optional(datetime)
 

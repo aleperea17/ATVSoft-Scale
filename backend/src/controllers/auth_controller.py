@@ -10,6 +10,7 @@ from jose import JWTError, jwt
 from pony.orm import db_session
 
 from src.models import AuthUser
+from src.services.mensualidad_service import mensualidad_dias_restantes
 from src.schemas import (
     AuthChangePasswordRequest,
     AuthChangePasswordResponse,
@@ -131,7 +132,16 @@ def require_user_id(
 
 @router.get("/me", response_model=AuthMeResponse)
 def me(username: str = Depends(get_current_username)):
-    return AuthMeResponse(username=username)
+    with db_session:
+        user = AuthUser.get(username=username)
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        vence = user.mensualidad_vence
+    return AuthMeResponse(
+        username=username,
+        mensualidad_vence=vence,
+        mensualidad_dias_restantes=mensualidad_dias_restantes(vence),
+    )
 
 
 @router.post("/change-password", response_model=AuthChangePasswordResponse)
