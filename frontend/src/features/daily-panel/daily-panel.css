@@ -1050,8 +1050,8 @@
 
 /* Mensualidades (solo panel admin) */
 .neo-mens {
-  --neo-mens-cols: minmax(6rem, 14rem) 6rem 8rem minmax(24rem, 1fr);
-  min-width: 46rem;
+  --neo-mens-cols: minmax(6rem, 14rem) 6rem 9rem minmax(25rem, 1fr);
+  min-width: 48rem;
 }
 
 .neo-mens__head,
@@ -1124,16 +1124,19 @@
   white-space: nowrap;
 }
 
-.neo-mens__clave {
+.neo-mens__campo {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--neo-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--neo-text3);
 }
 
-.neo-mens__clave-input {
-  flex: 1;
-  min-width: 12rem;
-  max-width: 22rem;
+.neo-mens__num {
+  width: 4.25rem;
   color: var(--neo-text);
 }
 

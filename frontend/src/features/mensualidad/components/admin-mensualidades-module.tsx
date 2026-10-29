@@ -2,32 +2,39 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import {
-  extenderMensualidad,
+  activarMensualidad,
   formatVence,
   listMensualidades,
-  readMensualidadKey,
-  setMensualidad,
-  writeMensualidadKey,
+  plazoRestante,
+  quitarMensualidad,
   type MensualidadCuenta,
 } from '../services/mensualidad-service'
 
-function quedan(c: MensualidadCuenta): { texto: string; tono: string } {
-  if (c.diasRestantes == null) return { texto: 'Sin aviso', tono: 'neo-mens__dias--off' }
-  if (c.diasRestantes < 0) return { texto: `Vencida hace ${Math.abs(c.diasRestantes)} d`, tono: 'neo-mens__dias--vencida' }
-  if (c.diasRestantes <= 7) return { texto: `${c.diasRestantes} d`, tono: 'neo-mens__dias--pocos' }
-  return { texto: `${c.diasRestantes} d`, tono: '' }
+function estado(c: MensualidadCuenta): { texto: string; tono: string } {
+  if (c.diasRestantes == null) return { texto: 'Sin mensualidad', tono: 'neo-mens__dias--off' }
+  if (c.bloqueada) return { texto: 'Bloqueada', tono: 'neo-mens__dias--vencida' }
+  const plazo = plazoRestante(c)
+  if (plazo != null) {
+    return { texto: plazo === 0 ? 'Plazo: último día' : `Plazo: ${plazo} d`, tono: 'neo-mens__dias--vencida' }
+  }
+  return { texto: `${c.diasRestantes} d`, tono: c.diasRestantes <= 7 ? 'neo-mens__dias--pocos' : '' }
 }
 
 function CuentaRow({
   cuenta,
+  adminToken,
   run,
 }: {
   cuenta: MensualidadCuenta
+  adminToken: string
   run: (action: () => Promise<MensualidadCuenta>) => Promise<void>
 }) {
-  const [fecha, setFecha] = useState(cuenta.vence || '')
-  useEffect(() => setFecha(cuenta.vence || ''), [cuenta.vence])
-  const dias = quedan(cuenta)
+  const [dias, setDias] = useState('30')
+  const [plazo, setPlazo] = useState(String(cuenta.plazoDias || 3))
+  const st = estado(cuenta)
+  const diasNum = Number(dias)
+  const plazoNum = Number(plazo)
+  const valido = Number.isInteger(diasNum) && diasNum >= 1 && Number.isInteger(plazoNum) && plazoNum >= 0
 
   return (
     <div className="neo-mens__row">
@@ -35,34 +42,41 @@ function CuentaRow({
         {cuenta.username}
       </div>
       <div>{cuenta.vence ? formatVence(cuenta.vence) : '—'}</div>
-      <div className={`neo-mens__dias ${dias.tono}`}>{dias.texto}</div>
+      <div className={`neo-mens__dias ${st.tono}`}>{st.texto}</div>
       <div className="neo-mens__acciones">
-        <input
-          type="date"
-          value={fecha}
-          onChange={(e) => setFecha(e.target.value)}
-          className="neo-panel__date-input"
-        />
-        <button
-          type="button"
-          className="neo-panel__btn neo-panel__btn--ghost"
-          disabled={!fecha || fecha === cuenta.vence}
-          onClick={() => void run(() => setMensualidad(readMensualidadKey(), cuenta.userId, fecha))}
-        >
-          Guardar
-        </button>
+        <label className="neo-mens__campo">
+          <span>Días</span>
+          <input
+            type="number"
+            min={1}
+            value={dias}
+            onChange={(e) => setDias(e.target.value)}
+            className="neo-panel__date-input neo-mens__num"
+          />
+        </label>
+        <label className="neo-mens__campo">
+          <span>Plazo</span>
+          <input
+            type="number"
+            min={0}
+            value={plazo}
+            onChange={(e) => setPlazo(e.target.value)}
+            className="neo-panel__date-input neo-mens__num"
+          />
+        </label>
         <button
           type="button"
           className="neo-panel__btn"
-          onClick={() => void run(() => extenderMensualidad(readMensualidadKey(), cuenta.userId, 30))}
+          disabled={!valido}
+          onClick={() => void run(() => activarMensualidad(adminToken, cuenta.userId, diasNum, plazoNum))}
         >
-          +30 días
+          Activar
         </button>
         {cuenta.vence ? (
           <button
             type="button"
             className="neo-panel__btn neo-panel__btn--ghost"
-            onClick={() => void run(() => setMensualidad(readMensualidadKey(), cuenta.userId, null))}
+            onClick={() => void run(() => quitarMensualidad(adminToken, cuenta.userId))}
           >
             Quitar
           </button>
@@ -72,32 +86,15 @@ function CuentaRow({
   )
 }
 
-export function AdminMensualidadesModule() {
+export function AdminMensualidadesModule({ adminToken }: { adminToken: string }) {
   const [cuentas, setCuentas] = useState<MensualidadCuenta[] | null>(null)
-  const [clave, setClave] = useState('')
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
-
-  const cargar = useCallback(async (key: string) => {
-    setError('')
-    setLoading(true)
-    try {
-      const res = await listMensualidades(key)
-      writeMensualidadKey(key)
-      setCuentas(res)
-    } catch (e) {
-      setCuentas(null)
-      setError(e instanceof Error ? e.message : 'Error')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
 
   useEffect(() => {
-    const stored = readMensualidadKey()
-    if (stored) void cargar(stored)
-    else setLoading(false)
-  }, [cargar])
+    void listMensualidades(adminToken)
+      .then(setCuentas)
+      .catch((e: Error) => setError(e.message))
+  }, [adminToken])
 
   const run = useCallback(async (action: () => Promise<MensualidadCuenta>) => {
     setError('')
@@ -105,9 +102,7 @@ export function AdminMensualidadesModule() {
       const res = await action()
       setCuentas((prev) => prev?.map((c) => (c.userId === res.userId ? res : c)) ?? prev)
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Error'
-      setError(msg)
-      if (msg === 'Clave incorrecta.') setCuentas(null)
+      setError(e instanceof Error ? e.message : 'Error')
     }
   }, [])
 
@@ -115,43 +110,26 @@ export function AdminMensualidadesModule() {
     <section className="neo-panel__module neo-panel__module--spaced">
       <div className="neo-panel__module-head">
         <h2 className="neo-panel__module-title">Mensualidades</h2>
-        <p className="neo-panel__module-hint">90 USD por mes · cada cuenta ve los días que le quedan</p>
+        <p className="neo-panel__module-hint">
+          Activar arranca hoy · terminado el plazo la cuenta se bloquea y se la manda a WhatsApp
+        </p>
       </div>
 
-      {loading ? (
+      {cuentas == null && !error ? (
         <div className="neo-panel__loading">Cargando mensualidades</div>
-      ) : cuentas == null ? (
-        <form
-          className="neo-mens__clave"
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (clave.trim()) void cargar(clave.trim())
-          }}
-        >
-          <input
-            type="password"
-            value={clave}
-            onChange={(e) => setClave(e.target.value)}
-            placeholder="Clave de mensualidades"
-            className="neo-panel__date-input neo-mens__clave-input"
-          />
-          <button type="submit" className="neo-panel__btn">
-            Desbloquear
-          </button>
-        </form>
-      ) : (
+      ) : cuentas ? (
         <div className="neo-mens">
           <div className="neo-mens__head">
             <div>Cuenta</div>
             <div>Vence</div>
-            <div>Quedan</div>
+            <div>Estado</div>
             <div />
           </div>
           {cuentas.map((c) => (
-            <CuentaRow key={c.userId} cuenta={c} run={run} />
+            <CuentaRow key={c.userId} cuenta={c} adminToken={adminToken} run={run} />
           ))}
         </div>
-      )}
+      ) : null}
       {error ? <p className="neo-mens__error">{error}</p> : null}
     </section>
   )

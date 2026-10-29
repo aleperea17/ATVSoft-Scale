@@ -51,5 +51,5 @@ export function AdminCorrectionPage() {
     return <AdminPanelPasswordGate onUnlocked={handleUnlocked} />
   }
 
-  return <DailyPanelPage mode="admin" adminToken={token} adminExtra={<AdminMensualidadesModule />} />
+  return <DailyPanelPage mode="admin" adminToken={token} adminExtra={<AdminMensualidadesModule adminToken={token} />} />
 }

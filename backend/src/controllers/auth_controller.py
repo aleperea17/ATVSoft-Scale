@@ -10,7 +10,7 @@ from jose import JWTError, jwt
 from pony.orm import db_session
 
 from src.models import AuthUser
-from src.services.mensualidad_service import mensualidad_dias_restantes
+from src.services.mensualidad_service import mensualidad_estado
 from src.schemas import (
     AuthChangePasswordRequest,
     AuthChangePasswordResponse,
@@ -136,11 +136,13 @@ def me(username: str = Depends(get_current_username)):
         user = AuthUser.get(username=username)
         if user is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-        vence = user.mensualidad_vence
+        estado = mensualidad_estado(user)
     return AuthMeResponse(
         username=username,
-        mensualidad_vence=vence,
-        mensualidad_dias_restantes=mensualidad_dias_restantes(vence),
+        mensualidad_vence=estado["vence"],
+        mensualidad_dias_restantes=estado["dias_restantes"],
+        mensualidad_plazo_dias=estado["plazo_dias"],
+        mensualidad_bloqueada=estado["bloqueada"],
     )
 
 

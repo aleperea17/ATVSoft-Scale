@@ -9,6 +9,8 @@ class AuthUser(db.Entity):
     password_hash = Required(str)
     # Último día cubierto por la mensualidad (90 USD); None = sin aviso.
     mensualidad_vence = Optional(date)
+    # Días de gracia después de mensualidad_vence; pasado eso la cuenta queda bloqueada.
+    mensualidad_plazo_dias = Required(int, default=0)
     created_at = Required(datetime, default=lambda: datetime.utcnow())
     updated_at = Optional(datetime)
 

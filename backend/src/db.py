@@ -642,7 +642,7 @@ def _migrate_postgres_setter_report_text_columns() -> None:
 
 
 def _migrate_postgres_authuser_mensualidad_vence() -> None:
-    """Fecha de vencimiento de la mensualidad por cuenta (Pony no altera tablas existentes)."""
+    """Vencimiento y días de plazo de la mensualidad por cuenta (Pony no altera tablas existentes)."""
     if (config("DB_PROVIDER", default="") or "").strip().lower() != "postgres":
         return
     try:
@@ -674,6 +674,9 @@ def _migrate_postgres_authuser_mensualidad_vence() -> None:
             sql_table = f'"{physical}"' if physical != physical.lower() else physical
             try:
                 cur.execute(f"ALTER TABLE {sql_table} ADD COLUMN IF NOT EXISTS mensualidad_vence DATE NULL")
+                cur.execute(
+                    f"ALTER TABLE {sql_table} ADD COLUMN IF NOT EXISTS mensualidad_plazo_dias INTEGER NOT NULL DEFAULT 0"
+                )
             except Exception:
                 pass
     finally:

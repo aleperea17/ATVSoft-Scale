@@ -29,6 +29,9 @@ class AuthMeResponse(BaseModel):
     mensualidad_vence: date | None = None
     # Días hasta el vencimiento (0 = vence hoy, negativo = vencida).
     mensualidad_dias_restantes: int | None = None
+    mensualidad_plazo_dias: int = 0
+    # Vencida y sin plazo: el front la manda a WhatsApp.
+    mensualidad_bloqueada: bool = False
 
 
 class AuthChangePasswordRequest(BaseModel):

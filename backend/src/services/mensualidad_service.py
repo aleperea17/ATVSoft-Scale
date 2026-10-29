@@ -1,25 +1,13 @@
-"""Mensualidad de cada cuenta: días que le quedan y extensión (solo con MENSUALIDAD_ADMIN_KEY)."""
+"""Mensualidad de cada cuenta: días vigentes, días de plazo y bloqueo al terminar el plazo."""
 
 from __future__ import annotations
 
-import hmac
 from datetime import date, datetime, timedelta
 
-from decouple import config
 from pony.orm import db_session
 
 from src.models import AuthUser
 from src.services.company_config_service import company_today
-
-DIAS_POR_MENSUALIDAD = 30
-# Clave aparte de ADMIN_PANEL_PASSWORD: esa la conoce el equipo del cliente. Vacía = deshabilitado.
-MENSUALIDAD_ADMIN_KEY = (config("MENSUALIDAD_ADMIN_KEY", default="") or "").strip()
-
-
-def verify_mensualidad_key(candidate: str | None) -> bool:
-    if len(MENSUALIDAD_ADMIN_KEY) < 12 or not candidate:
-        return False
-    return hmac.compare_digest(candidate.strip().encode(), MENSUALIDAD_ADMIN_KEY.encode())
 
 
 def mensualidad_dias_restantes(vence: date | None) -> int | None:
@@ -28,34 +16,39 @@ def mensualidad_dias_restantes(vence: date | None) -> int | None:
     return (vence - company_today()).days
 
 
+def mensualidad_estado(user: AuthUser) -> dict:
+    """Llamar dentro de db_session. Bloqueada = pasó el vencimiento y también los días de plazo."""
+    dias = mensualidad_dias_restantes(user.mensualidad_vence)
+    plazo = max(int(user.mensualidad_plazo_dias or 0), 0)
+    return {
+        "user_id": user.id,
+        "username": user.username,
+        "vence": user.mensualidad_vence,
+        "dias_restantes": dias,
+        "plazo_dias": plazo,
+        "bloqueada": dias is not None and dias < -plazo,
+    }
+
+
 def list_mensualidades() -> list[dict]:
     with db_session:
-        users = list(AuthUser.select().order_by(AuthUser.username))
-        return [
-            {
-                "user_id": u.id,
-                "username": u.username,
-                "vence": u.mensualidad_vence,
-                "dias_restantes": mensualidad_dias_restantes(u.mensualidad_vence),
-            }
-            for u in users
-        ]
+        return [mensualidad_estado(u) for u in list(AuthUser.select().order_by(AuthUser.username))]
 
 
-def set_mensualidad_vence(user_id: int, vence: date | None) -> date | None:
+def activar_mensualidad(user_id: int, dias: int, plazo_dias: int) -> dict:
+    """Arranca la cuenta desde hoy: vence en `dias` días y después tiene `plazo_dias` de gracia."""
     with db_session:
         user = AuthUser[user_id]
-        user.mensualidad_vence = vence
+        user.mensualidad_vence = company_today() + timedelta(days=dias)
+        user.mensualidad_plazo_dias = plazo_dias
         user.updated_at = datetime.utcnow()
-        return user.mensualidad_vence
+        return mensualidad_estado(user)
 
 
-def extender_mensualidad(user_id: int, dias: int = DIAS_POR_MENSUALIDAD) -> date:
-    """Suma días desde el vencimiento actual; si ya venció o no tenía, desde hoy."""
+def quitar_mensualidad(user_id: int) -> dict:
     with db_session:
         user = AuthUser[user_id]
-        hoy = company_today()
-        base = user.mensualidad_vence if user.mensualidad_vence and user.mensualidad_vence >= hoy else hoy
-        user.mensualidad_vence = base + timedelta(days=dias)
+        user.mensualidad_vence = None
+        user.mensualidad_plazo_dias = 0
         user.updated_at = datetime.utcnow()
-        return user.mensualidad_vence
+        return mensualidad_estado(user)
