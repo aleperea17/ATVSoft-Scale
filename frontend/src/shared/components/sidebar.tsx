@@ -105,7 +105,7 @@ export function Sidebar({ className }: SidebarProps) {
 
   return (
     <aside
-      className={`sticky top-0 flex h-screen w-56 flex-shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg2)] ${className ?? ''}`}
+      className={`sticky top-[var(--top-bar-h,0px)] flex h-[calc(100vh-var(--top-bar-h,0px))] w-56 flex-shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg2)] ${className ?? ''}`}
     >
       <div className="flex justify-center px-4 pt-4 pb-3">
         <BrandLogo className="h-12 w-auto max-w-[72px] flex-shrink-0 object-contain opacity-95" />

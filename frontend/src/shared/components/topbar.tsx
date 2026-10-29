@@ -79,7 +79,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
   const subtitle = subtitles[pathname]
 
   return (
-    <header className="sticky top-0 z-10 flex min-h-[56px] items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--topbar-bg)] px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8 lg:py-4">
+    <header className="sticky top-[var(--top-bar-h,0px)] z-10 flex min-h-[56px] items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--topbar-bg)] px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8 lg:py-4">
       <div className="flex min-w-0 flex-1 items-center gap-3">
         {onMenuClick ? (
           <button

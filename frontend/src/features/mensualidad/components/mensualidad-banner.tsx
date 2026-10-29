@@ -12,17 +12,15 @@ import {
   type Mensualidad,
 } from '../services/mensualidad-service'
 
-function WhatsappButton({ username, grande = false }: { username: string; grande?: boolean }) {
+function WhatsappButton({ username }: { username: string }) {
   return (
     <a
       href={mensualidadWhatsappUrl(username)}
       target="_blank"
       rel="noopener noreferrer"
-      className={`rounded-md bg-[var(--green)] font-medium text-white hover:opacity-90 ${
-        grande ? 'px-5 py-2.5 text-[14px]' : 'px-3 py-1 text-[12px]'
-      }`}
+      className="rounded-md bg-[var(--green)] px-5 py-2.5 text-[14px] font-medium text-white hover:opacity-90"
     >
-      {grande ? 'Hablar por WhatsApp' : 'Extender por WhatsApp'}
+      Hablar por WhatsApp
     </a>
   )
 }
@@ -38,7 +36,7 @@ function Bloqueo({ username }: { username: string }) {
           Para seguir usando la plataforma escribinos por WhatsApp y la reactivamos.
         </p>
         <div className="flex flex-col items-center gap-4">
-          <WhatsappButton username={username} grande />
+          <WhatsappButton username={username} />
           <button
             type="button"
             onClick={() => {
@@ -51,6 +49,56 @@ function Bloqueo({ username }: { username: string }) {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+const TOP_BAR_HEIGHT = '2rem'
+
+function TopBar({ data }: { data: Mensualidad & { username: string } }) {
+  // Sidebar y topbar son sticky: se corren hacia abajo lo que ocupa esta barra.
+  useEffect(() => {
+    document.documentElement.style.setProperty('--top-bar-h', TOP_BAR_HEIGHT)
+    return () => {
+      document.documentElement.style.removeProperty('--top-bar-h')
+    }
+  }, [])
+
+  const dias = data.diasRestantes ?? 0
+  const plazo = plazoRestante(data)
+
+  let texto: string
+  if (plazo != null) {
+    texto =
+      plazo === 0
+        ? 'Tu mensualidad venció · hoy es el último día de plazo'
+        : `Tu mensualidad venció · ${plazo === 1 ? 'queda' : 'quedan'} ${plazo} ${plazo === 1 ? 'día' : 'días'} de plazo`
+  } else if (dias === 0) {
+    texto = 'Tu mensualidad vence hoy'
+  } else {
+    texto = `${dias === 1 ? 'Queda' : 'Quedan'} ${dias} ${dias === 1 ? 'día' : 'días'} de mensualidad · vence el ${formatVence(data.vence ?? '')}`
+  }
+
+  const tono =
+    plazo != null
+      ? 'bg-[var(--accent)] text-white'
+      : dias <= 7
+        ? 'bg-[rgba(245,158,11,0.14)] text-[var(--amber)] border-b border-[rgba(245,158,11,0.25)]'
+        : 'bg-[var(--bg2)] text-[var(--text3)] border-b border-[var(--border)]'
+
+  return (
+    <div
+      className={`sticky top-0 z-30 flex h-8 items-center justify-center gap-3 overflow-hidden whitespace-nowrap px-4 text-[12px] ${tono}`}
+    >
+      <span className="truncate">{texto}</span>
+      <a
+        href={mensualidadWhatsappUrl(data.username)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="shrink-0 font-medium underline underline-offset-2 opacity-90 hover:opacity-100"
+      >
+        Extender por WhatsApp
+      </a>
     </div>
   )
 }
@@ -78,34 +126,5 @@ export function MensualidadBanner() {
     return pathname?.startsWith('/admin') ? null : <Bloqueo username={data.username} />
   }
 
-  const dias = data.diasRestantes
-  const plazo = plazoRestante(data)
-
-  let texto: string
-  if (plazo != null) {
-    texto =
-      plazo === 0
-        ? 'Tu mensualidad venció. Hoy es el último día de plazo: después se bloquea el acceso.'
-        : `Tu mensualidad venció. Te ${plazo === 1 ? 'queda' : 'quedan'} ${plazo} ${plazo === 1 ? 'día' : 'días'} de plazo antes de que se bloquee el acceso.`
-  } else if (dias === 0) {
-    texto = 'Tu mensualidad vence hoy.'
-  } else {
-    texto = `Te ${dias === 1 ? 'queda' : 'quedan'} ${dias} ${dias === 1 ? 'día' : 'días'} de mensualidad (vence el ${formatVence(data.vence)}).`
-  }
-
-  const tono =
-    plazo != null
-      ? 'border-[var(--border-red)] bg-[var(--red-faint)] text-[var(--red-light)]'
-      : dias <= 7
-        ? 'border-[rgba(245,158,11,0.4)] bg-[rgba(245,158,11,0.1)] text-[var(--amber)]'
-        : 'border-[var(--border)] bg-[var(--bg2)] text-[var(--text2)]'
-
-  return (
-    <div
-      className={`mx-4 mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-[13px] sm:mx-6 lg:mx-8 ${tono}`}
-    >
-      <span>{texto}</span>
-      <WhatsappButton username={data.username} />
-    </div>
-  )
+  return <TopBar data={data} />
 }
