@@ -1,7 +1,5 @@
 'use client'
 
-import { apiFetch } from '@/lib/api'
-import { clearAdminPanelToken } from '@/features/admin-panel/services/admin-panel-service'
 
 const BACKEND_BASE =
   (process.env.NEXT_PUBLIC_BACKEND_URL || '').trim().replace(/\/$/, '') || '/api-backend'
@@ -48,41 +46,66 @@ export async function getMiMensualidad(): Promise<(Mensualidad & { username: str
   }
 }
 
-type ApiMensualidad = { vence?: string | null; dias_restantes?: number | null; detail?: string }
+const KEY_STORAGE = 'atvscale_mensualidad_key'
 
-async function parseAdmin(res: Response): Promise<Mensualidad> {
-  const raw = (await res.json().catch(() => ({}))) as ApiMensualidad
+export type MensualidadCuenta = Mensualidad & { userId: number; username: string }
+
+type ApiCuenta = {
+  user_id: number
+  username: string
+  vence?: string | null
+  dias_restantes?: number | null
+}
+
+export function readMensualidadKey(): string {
+  if (typeof window === 'undefined') return ''
+  return sessionStorage.getItem(KEY_STORAGE) || ''
+}
+
+export function writeMensualidadKey(key: string): void {
+  if (key) sessionStorage.setItem(KEY_STORAGE, key)
+  else sessionStorage.removeItem(KEY_STORAGE)
+}
+
+function toCuenta(raw: ApiCuenta): MensualidadCuenta {
+  return {
+    userId: raw.user_id,
+    username: raw.username,
+    vence: raw.vence ?? null,
+    diasRestantes: raw.dias_restantes ?? null,
+  }
+}
+
+async function adminFetch(key: string, path: string, init?: RequestInit): Promise<unknown> {
+  const res = await fetch(`${BACKEND_BASE}/api/admin/mensualidad${path}`, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', 'X-Mensualidad-Key': key },
+  })
+  const raw = (await res.json().catch(() => ({}))) as { detail?: string }
   if (res.status === 403) {
-    clearAdminPanelToken()
-    throw new Error('Sesión admin expirada. Volvé a ingresar la contraseña.')
+    writeMensualidadKey('')
+    throw new Error('Clave incorrecta.')
   }
   if (!res.ok) throw new Error(raw.detail || 'No se pudo actualizar la mensualidad.')
-  return { vence: raw.vence ?? null, diasRestantes: raw.dias_restantes ?? null }
+  return raw
 }
 
-export async function getAdminMensualidad(token: string): Promise<Mensualidad> {
-  return parseAdmin(
-    await apiFetch('/admin/panel/mensualidad', { headers: { 'X-Admin-Panel-Token': token } }),
+export async function listMensualidades(key: string): Promise<MensualidadCuenta[]> {
+  return ((await adminFetch(key, '')) as ApiCuenta[]).map(toCuenta)
+}
+
+export async function setMensualidad(key: string, userId: number, vence: string | null): Promise<MensualidadCuenta> {
+  return toCuenta(
+    (await adminFetch(key, `/${userId}`, { method: 'PUT', body: JSON.stringify({ vence }) })) as ApiCuenta,
   )
 }
 
-export async function setAdminMensualidad(token: string, vence: string | null): Promise<Mensualidad> {
-  return parseAdmin(
-    await apiFetch('/admin/panel/mensualidad', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'X-Admin-Panel-Token': token },
-      body: JSON.stringify({ vence }),
-    }),
-  )
-}
-
-export async function extenderAdminMensualidad(token: string, dias = 30): Promise<Mensualidad> {
-  return parseAdmin(
-    await apiFetch('/admin/panel/mensualidad/extender', {
+export async function extenderMensualidad(key: string, userId: number, dias = 30): Promise<MensualidadCuenta> {
+  return toCuenta(
+    (await adminFetch(key, `/${userId}/extender`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Admin-Panel-Token': token },
       body: JSON.stringify({ dias }),
-    }),
+    })) as ApiCuenta,
   )
 }
 

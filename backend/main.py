@@ -22,6 +22,7 @@ from src.controllers.conexiones_controller import router as conexiones_router
 from src.controllers.ghl_controller import router as ghl_router
 # from src.controllers.health_controller import router as health_router
 from src.controllers.master_lists_controller import router as master_lists_router
+from src.controllers.mensualidad_controller import router as mensualidad_router
 from src.controllers.programs_controller import router as programs_router
 from src.controllers.avatars_controller import router as avatars_router
 from src.controllers.lead_statuses_controller import router as lead_statuses_router
@@ -303,6 +304,7 @@ app.add_middleware(
 
 # app.include_router(health_router)
 app.include_router(admin_panel_router)
+app.include_router(mensualidad_router)
 app.include_router(auth_router)
 app.include_router(agent_router)
 app.include_router(conexiones_router)
