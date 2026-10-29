@@ -98,9 +98,12 @@ function PanelShell({ children }: { children: ReactNode }) {
 export function DailyPanelPage({
   mode = 'default',
   adminToken = null,
+  adminExtra = null,
 }: {
   mode?: 'default' | 'admin'
   adminToken?: string | null
+  /** Bloques extra al pie del panel, solo en modo admin. */
+  adminExtra?: ReactNode
 }) {
   const isAdmin = mode === 'admin' && Boolean(adminToken)
   const { ready, userId } = useAuthUser()
@@ -694,6 +697,7 @@ export function DailyPanelPage({
           </div>
         </div>
       ) : null}
+      {isAdmin ? adminExtra : null}
     </PanelShell>
   )
 }

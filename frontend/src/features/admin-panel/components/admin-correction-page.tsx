@@ -8,6 +8,7 @@ import {
   verifyAdminPanelToken,
 } from '../services/admin-panel-service'
 import { AdminPanelPasswordGate } from './admin-panel-password-gate'
+import { AdminMensualidadesModule } from '@/features/mensualidad/components/admin-mensualidades-module'
 
 function todayIso(): string {
   return todayIsoInCompanyTz()
@@ -50,5 +51,5 @@ export function AdminCorrectionPage() {
     return <AdminPanelPasswordGate onUnlocked={handleUnlocked} />
   }
 
-  return <DailyPanelPage mode="admin" adminToken={token} />
+  return <DailyPanelPage mode="admin" adminToken={token} adminExtra={<AdminMensualidadesModule />} />
 }

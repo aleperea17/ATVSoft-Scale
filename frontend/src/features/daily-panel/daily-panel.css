@@ -1047,3 +1047,98 @@
     color: var(--neo-text3);
   }
 }
+
+/* Mensualidades (solo panel admin) */
+.neo-mens {
+  --neo-mens-cols: minmax(6rem, 14rem) 6rem 8rem minmax(24rem, 1fr);
+  min-width: 46rem;
+}
+
+.neo-mens__head,
+.neo-mens__row {
+  display: grid;
+  grid-template-columns: var(--neo-mens-cols);
+  column-gap: var(--neo-col-gap);
+  align-items: center;
+}
+
+.neo-mens__head {
+  padding: 0 0 0.65rem;
+  border-bottom: 1px solid var(--neo-border-dim);
+  font-family: var(--neo-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--neo-text3);
+}
+
+.neo-mens__row {
+  padding: 0.65rem 0;
+  border-bottom: 1px solid rgba(230, 57, 70, 0.06);
+  font-size: 12px;
+  color: var(--neo-text2);
+}
+
+.neo-mens__row:last-child {
+  border-bottom: none;
+}
+
+.neo-mens__cuenta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--neo-text);
+}
+
+.neo-mens__dias {
+  font-family: var(--neo-mono);
+  font-weight: 600;
+  color: var(--neo-text);
+}
+
+.neo-mens__dias--pocos {
+  color: #f59e0b;
+}
+
+.neo-mens__dias--vencida {
+  color: var(--neo-hot);
+}
+
+.neo-mens__dias--off {
+  font-weight: 400;
+  color: var(--neo-text3);
+}
+
+.neo-mens__acciones {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.neo-mens__acciones .neo-panel__btn {
+  white-space: nowrap;
+}
+
+.neo-mens__clave {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.neo-mens__clave-input {
+  flex: 1;
+  min-width: 12rem;
+  max-width: 22rem;
+  color: var(--neo-text);
+}
+
+.neo-mens__error {
+  margin: 0.75rem 0 0;
+  font-size: 12px;
+  color: var(--neo-hot);
+}
