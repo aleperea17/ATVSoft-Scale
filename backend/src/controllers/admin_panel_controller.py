@@ -26,6 +26,7 @@ from src.services.agent_closer_service import list_llamadas_dia
 from src.services.company_config_service import company_now
 from src.services.lead_statuses_services import default_lead_status_name
 from src.services.programs_services import build_program_norm_price_map
+from src.services.weekly_team_discord_service import generate_weekly_team_reports
 from src.controllers.auth_controller import require_user_id
 
 router = APIRouter(prefix="/api/admin/panel", tags=["admin-panel"], redirect_slashes=False)
@@ -115,3 +116,17 @@ def admin_panel_manual_call(
         _sync_dias_para_agendar(row)
         norm_prices = build_program_norm_price_map(uid)
         return _to_lead_out(row, norm_prices)
+
+
+class WeeklyDiscordBody(BaseModel):
+    as_of: date
+
+
+@router.post("/weekly-discord")
+def resend_weekly_discord(
+    body: WeeklyDiscordBody,
+    uid: int = Depends(require_admin_panel),
+) -> dict:
+    """Reenvía a Discord el reporte semanal (lun–dom) de la semana que contiene `as_of`."""
+    rows = generate_weekly_team_reports(as_of=body.as_of, send_discord=True, only_user_id=uid)
+    return rows[0] if rows else {}

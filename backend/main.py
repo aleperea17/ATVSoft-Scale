@@ -1,3 +1,4 @@
+import asyncio
 import os
 import glob
 from contextlib import asynccontextmanager
@@ -67,7 +68,10 @@ from src.services.closer_report_auto_service import generate_daily_reports_all_u
 from src.services.plazos_pago_service import generate_plazos_pago
 from src.services.weekly_team_discord_service import generate_weekly_team_reports
 
-scheduler = AsyncIOScheduler()
+# Los jobs bloquean el event loop mientras sincronizan (Instagram, reels, Calendly).
+# Con el misfire_grace_time por defecto (1 s) un cron que cae durante otro sync se
+# descarta en silencio: así se perdió el reporte semanal de los domingos 23:30.
+scheduler = AsyncIOScheduler(job_defaults={"misfire_grace_time": 3600, "coalesce": True})
 
 
 async def auto_sync_stories() -> None:
@@ -175,7 +179,7 @@ async def auto_sync_calendly() -> None:
 async def auto_generate_closer_daily_reports() -> None:
     """Reporte de ventas del closer desde panel diario (23:00 Argentina)."""
     try:
-        generate_daily_reports_all_users(send_discord=True)
+        await asyncio.to_thread(generate_daily_reports_all_users, send_discord=True)
     except Exception as e:
         print(f"[scheduler] Error en auto_generate_closer_daily_reports: {e}")
 
@@ -183,7 +187,7 @@ async def auto_generate_closer_daily_reports() -> None:
 async def auto_weekly_team_discord_report() -> None:
     """Resumen lun–dom del equipo comercial a Discord (domingo 23:30 TZ empresa)."""
     try:
-        rows = generate_weekly_team_reports(send_discord=True)
+        rows = await asyncio.to_thread(generate_weekly_team_reports, send_discord=True)
         print(f"[scheduler] Reporte semanal equipo Discord OK tenants={len(rows)}")
     except Exception as e:
         print(f"[scheduler] Error en auto_weekly_team_discord_report: {e}")

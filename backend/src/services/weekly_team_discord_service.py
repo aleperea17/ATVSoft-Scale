@@ -59,6 +59,7 @@ def generate_weekly_team_reports(
     *,
     as_of: date | None = None,
     send_discord: bool = True,
+    only_user_id: int | None = None,
 ) -> list[dict[str, Any]]:
     """
     Semana lun–dom que contiene `as_of` (por defecto hoy empresa).
@@ -71,13 +72,17 @@ def generate_weekly_team_reports(
     webhook_ok = _discord.is_weekly_webhook_configured() if send else False
     if send and not webhook_ok:
         print("[weekly-discord] DISCORD_WEEKLY_WEBHOOK_URL vacío; no se envía.")
-    for uid in _user_ids():
+    uids = [only_user_id] if only_user_id is not None else _user_ids()
+    for uid in uids:
         payload = _metrics_for_user(uid, start, end)
+        payload["enviado"] = False
         out.append(payload)
         if not send or not webhook_ok:
             continue
         try:
-            _discord.send_weekly_team_report_to_discord(payload)
+            payload["enviado"] = _discord.send_weekly_team_report_to_discord(payload)
+            if not payload["enviado"]:
+                print(f"[weekly-discord] user={uid} Discord rechazó el envío")
         except Exception as exc:
             print(f"[weekly-discord] user={uid} error: {exc}")
     return out

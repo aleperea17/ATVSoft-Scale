@@ -178,7 +178,10 @@ class DiscordServices:
         }
 
         try:
-            resp = httpx.post(webhook_url, json={"embeds": [embed]}, timeout=5.0)
+            resp = httpx.post(webhook_url, json={"embeds": [embed]}, timeout=10.0)
+            if not resp.is_success:
+                print(f"[weekly-discord] HTTP {resp.status_code}: {resp.text[:200]}")
             return resp.is_success
-        except Exception:
+        except Exception as exc:
+            print(f"[weekly-discord] error de red: {exc}")
             return False
